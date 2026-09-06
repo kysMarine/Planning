@@ -118,6 +118,7 @@
   }
   .day-recap-line{font-size:11px; color:var(--ink); line-height:1.5;}
   .day-recap-line b{color:var(--ink-soft); font-weight:700;}
+  .recap-highlight{color:var(--names-red); font-weight:700;}
   .day-col-actions{
     display:flex; justify-content:space-between; align-items:center; padding:7px 10px;
     border-bottom:1px solid var(--paper-line);
@@ -189,19 +190,30 @@
   .add-day-col:hover{border-color:var(--navy); color:var(--navy);}
 
   /* ---------- Legend ---------- */
-  .legend{
-    display:flex; gap:10px; flex-wrap:wrap; padding:14px 20px 0;
-    font-size:12px; color:var(--ink-soft); align-items:center;
-  }
-  .legend span{display:flex; align-items:center; gap:5px;}
-  .legend i{width:10px; height:10px; border-radius:2px; display:inline-block;}
-  .legend .grid-info{margin-left:auto; font-style:italic;}
-  .legend .names-hint b{color:var(--names-red);}
+  /* legend removed */
 
   /* ---------- Team page ---------- */
   .team-page{max-width:620px; margin:0 auto; padding:32px 20px 60px;}
   .team-page h2{font-size:24px; margin:0 0 6px; color:var(--navy-deep);}
   .team-page .modal-sub{font-size:13px; color:var(--ink-soft); margin:0 0 18px;}
+
+  .archives-controls{display:flex; gap:8px; margin-bottom:16px;}
+  .archives-controls input{
+    flex:1; padding:9px 11px; border:1px solid var(--paper-line); border-radius:4px;
+    font-size:14px; background:#FBFAF6; color:var(--ink);
+  }
+  .archives-controls select{
+    padding:9px 11px; border:1px solid var(--paper-line); border-radius:4px;
+    font-size:13px; background:#fff; color:var(--ink);
+  }
+  .archive-row{
+    display:flex; align-items:center; justify-content:space-between; gap:10px;
+    padding:12px 2px; border-bottom:1px solid var(--paper-line);
+  }
+  .archive-row-info{display:flex; flex-direction:column; gap:3px; min-width:0;}
+  .archive-row-title{font-weight:700; color:var(--navy-deep); font-size:14.5px;}
+  .archive-row-meta{font-size:12px; color:var(--ink-soft);}
+  .archive-row-actions{display:flex; gap:6px; flex:0 0 auto;}
 
   /* ---------- Modal ---------- */
   .overlay{
@@ -266,6 +278,8 @@
   .manage-row input[type=color]{width:26px; height:26px; border:none; padding:0; background:none; cursor:pointer;}
   .manage-row input[type=checkbox]{width:16px; height:16px; cursor:pointer;}
   .manage-row .icon-btn{color:var(--ink-soft); font-size:14px;}
+  .highlight-toggle-btn{color:var(--paper-line) !important;}
+  .highlight-toggle-btn.active{color:var(--names-red) !important;}
   .manage-row span.pname{flex:1; font-size:14px;}
   .add-inline{display:flex; gap:6px; margin-top:12px;}
   .add-inline input{flex:1;}
@@ -273,6 +287,14 @@
   .add-inline .btn{padding:8px 14px; font-size:13px;}
 
   .empty-hint{padding:36px 20px; text-align:center; color:var(--ink-soft); font-size:14px;}
+
+  .save-toast{
+    position:fixed; bottom:24px; left:50%; transform:translateX(-50%) translateY(20px);
+    background:var(--navy-deep); color:#EFE9D8; padding:10px 18px; border-radius:6px;
+    font-size:13.5px; box-shadow:0 4px 14px rgba(0,0,0,.25); opacity:0; pointer-events:none;
+    transition:opacity .2s, transform .2s; z-index:200;
+  }
+  .save-toast.show{opacity:1; transform:translateX(-50%) translateY(0);}
 
   @media print{
     *{-webkit-print-color-adjust:exact !important; print-color-adjust:exact !important; color-adjust:exact !important;}
@@ -293,7 +315,9 @@
   <nav class="main-tabs">
     <button class="main-tab active" id="tabPlanningBtn" data-page="planning">Planning</button>
     <button class="main-tab" id="tabTeamBtn" data-page="team">Équipe</button>
+    <button class="main-tab" id="tabArchivesBtn" data-page="archives">Archives</button>
   </nav>
+  <button class="btn" id="toolbarToggleBtn" title="Afficher/masquer les outils">☰ Outils</button>
   <div class="toolbar-actions" id="toolbarActions">
     <select class="btn" id="weekSelect" title="Charger une semaine enregistrée"></select>
     <button class="btn" id="newWeekBtn">+ Semaine vierge</button>
@@ -304,12 +328,12 @@
     <button class="btn danger" id="deleteWeekBtn">Supprimer</button>
     <button class="btn" id="exportCsvBtn" title="Fichier .csv à importer dans Google Sheets ou Excel">Export CSV</button>
     <button class="btn primary" id="printBtn">Imprimer / PDF</button>
+    <button class="btn primary" id="saveNowBtn" title="Enregistrer cette semaine maintenant">💾 Enregistrer</button>
   </div>
 </div>
 
 <!-- ============ PLANNING PAGE ============ -->
 <div id="planningPage">
-  <div class="legend" id="legend"></div>
   <div class="board-wrap">
     <div class="board" id="board"></div>
   </div>
@@ -329,6 +353,22 @@
       <input type="text" id="newPersonName" placeholder="Nouveau prénom">
       <button class="btn primary" id="addPersonBtn" style="color:var(--navy-deep); border:1px solid var(--paper-line); background:var(--paper);">Ajouter</button>
     </div>
+  </div>
+</div>
+
+<!-- ============ ARCHIVES PAGE (onglet à part) ============ -->
+<div id="archivesPage" style="display:none;">
+  <div class="team-page">
+    <h2>Archives</h2>
+    <p class="modal-sub">Toutes tes semaines enregistrées, retrouvables à tout moment.</p>
+    <div class="archives-controls">
+      <input type="text" id="archiveSearch" placeholder="Rechercher une semaine (titre)...">
+      <select id="archiveSort">
+        <option value="desc">Plus récentes d'abord</option>
+        <option value="asc">Plus anciennes d'abord</option>
+      </select>
+    </div>
+    <div id="archivesList"></div>
   </div>
 </div>
 
@@ -535,15 +575,27 @@ try{
     day.blocks.forEach(b=>{ const t=toMin(b.start); if(min===null || t<min) min=t; });
     return min===null ? null : fromMin(min);
   }
+  function weekDateRange(week){
+    const dates = week.days.map(d=>d.date).filter(Boolean);
+    if(!dates.length) return "";
+    return dates.length>1 ? `${dates[0]} → ${dates[dates.length-1]}` : dates[0];
+  }
+  function formatCreatedAt(ts){
+    if(!ts) return "";
+    return new Date(ts).toLocaleDateString('fr-FR', {day:'2-digit', month:'2-digit', year:'numeric'});
+  }
+
   function dayTeamRecap(day){
     const names = new Set();
     day.blocks.forEach(b=> (b.people||[]).forEach(n=> names.add(n)));
     const perms=[], interims=[];
     names.forEach(n=>{
       const p = state.people.find(p=>p.name===n);
-      if(p && p.type==='interimaire') interims.push(n); else perms.push(n);
+      const entry = {name:n, highlight: !!(p && p.highlight)};
+      if(p && p.type==='interimaire') interims.push(entry); else perms.push(entry);
     });
-    perms.sort(); interims.sort();
+    perms.sort((a,b)=> a.name.localeCompare(b.name));
+    interims.sort((a,b)=> a.name.localeCompare(b.name));
     return {perms, interims};
   }
 
@@ -591,13 +643,13 @@ try{
         {typeId:"maree", start:"04:30", end:"08:00", lane:0, laneSpan:1, people:["Carad"], note:"Marée St Co 1P — Nettoyage réserve langue"}
       ]}
     ];
-    return {id:uid(), title:"Semaine du 31/08 (exemple)", grid:{...DEFAULT_GRID}, excludedPeople:[],
+    return {id:uid(), title:"Semaine du 31/08 (exemple)", grid:{...DEFAULT_GRID}, excludedPeople:[], createdAt:Date.now(),
       days: days.map(d=>({id:uid(), ...d, blocks:d.blocks.map(b=>({id:uid(), ...b}))}))};
   }
 
   function blankWeek(){
     const labels = ["Lundi","Mardi","Mercredi","Jeudi","Vendredi","Samedi"];
-    return {id:uid(), title:"Nouvelle semaine", grid:{...DEFAULT_GRID}, excludedPeople:[],
+    return {id:uid(), title:"Nouvelle semaine", grid:{...DEFAULT_GRID}, excludedPeople:[], createdAt:Date.now(),
       days: labels.map(l=>({id:uid(), label:l, date:"", coef:"", horaire:"", lanes:1, blocks:[]}))};
   }
 
@@ -614,9 +666,10 @@ try{
       if(!raw.types) raw.types = CORE_TYPES.slice();
       if(!raw.people) raw.people = [];
       raw.people = raw.people.map(p => typeof p === 'string' ? {id:uid(), name:p, type:'permanent'} : p);
-      raw.weeks.forEach(w=>{
+      raw.weeks.forEach((w,idx)=>{
         if(!w.grid) w.grid = {...DEFAULT_GRID};
         if(!w.excludedPeople) w.excludedPeople = [];
+        if(!w.createdAt) w.createdAt = Date.now() - (raw.weeks.length-idx)*1000;
         w.days.forEach(d=>{ if(!d.lanes) d.lanes=1; compactDayLanes(d); });
       });
       return raw;
@@ -675,24 +728,39 @@ try{
   // ---------- Main tabs: Planning / Équipe ----------
   const planningPage = document.getElementById("planningPage");
   const teamPage = document.getElementById("teamPage");
+  const archivesPage = document.getElementById("archivesPage");
   const toolbarActions = document.getElementById("toolbarActions");
   document.getElementById("tabPlanningBtn").addEventListener("click", ()=> switchMainTab("planning"));
   document.getElementById("tabTeamBtn").addEventListener("click", ()=> switchMainTab("team"));
+  document.getElementById("tabArchivesBtn").addEventListener("click", ()=> switchMainTab("archives"));
+  const TOOLBAR_COLLAPSE_KEY = "kys_marine_toolbar_collapsed";
+  let currentMainPage = "planning";
+  let toolsCollapsed = localStorage.getItem(TOOLBAR_COLLAPSE_KEY) === "1";
+
+  function updateToolbarVisibility(){
+    toolbarActions.style.display = (currentMainPage==="planning" && !toolsCollapsed) ? "" : "none";
+  }
   function switchMainTab(page){
+    currentMainPage = page;
     document.getElementById("tabPlanningBtn").classList.toggle("active", page==="planning");
     document.getElementById("tabTeamBtn").classList.toggle("active", page==="team");
+    document.getElementById("tabArchivesBtn").classList.toggle("active", page==="archives");
     planningPage.style.display = page==="planning" ? "" : "none";
     teamPage.style.display = page==="team" ? "" : "none";
-    toolbarActions.style.display = page==="planning" ? "" : "none";
+    archivesPage.style.display = page==="archives" ? "" : "none";
+    updateToolbarVisibility();
     if(page==="team") renderPeopleListPage();
+    if(page==="archives") renderArchivesList();
   }
+  document.getElementById("toolbarToggleBtn").addEventListener("click", ()=>{
+    toolsCollapsed = !toolsCollapsed;
+    localStorage.setItem(TOOLBAR_COLLAPSE_KEY, toolsCollapsed ? "1" : "0");
+    updateToolbarVisibility();
+  });
 
   function renderLegend(){
-    const week = activeWeek();
-    legendEl.innerHTML = state.types.map(t=>
-      `<span><i style="background:${t.color}"></i>${escapeHtml(t.name)}</span>`
-    ).join("") + `<span class="names-hint"><b>■</b> Noms de l'équipe</span>`
-      + (week ? `<span class="grid-info">double-clic = modifier · glisser = déplacer · vers un autre jour = dupliquer · bord du jour = colonne · haut/bas du module = régler l'horaire</span>` : "");
+    // Légende retirée à la demande de l'utilisateur — fonction conservée à vide
+    // pour ne pas casser les appels existants ailleurs dans le code.
   }
 
   function renderWeekSelect(){
@@ -751,8 +819,8 @@ try{
       const recap = dayTeamRecap(day);
       const recapHtml = (recap.perms.length || recap.interims.length) ? `
         <div class="day-recap">
-          ${recap.perms.length ? `<div class="day-recap-line"><b>Personnel :</b> ${recap.perms.map(escapeHtml).join(", ")}</div>` : ""}
-          ${recap.interims.length ? `<div class="day-recap-line"><b>Intérimaires :</b> ${recap.interims.map(escapeHtml).join(", ")}</div>` : ""}
+          ${recap.perms.length ? `<div class="day-recap-line"><b>Personnel :</b> ${recap.perms.map(p=> p.highlight ? `<span class="recap-highlight">${escapeHtml(p.name)}</span>` : escapeHtml(p.name)).join(", ")}</div>` : ""}
+          ${recap.interims.length ? `<div class="day-recap-line"><b>Intérimaires :</b> ${recap.interims.map(p=> p.highlight ? `<span class="recap-highlight">${escapeHtml(p.name)}</span>` : escapeHtml(p.name)).join(", ")}</div>` : ""}
         </div>` : "";
 
       return `
@@ -1194,6 +1262,7 @@ try{
     peopleListPageEl.innerHTML = list.map(p=>`
       <div class="manage-row" data-id="${p.id}">
         <input type="text" value="${escapeHtml(p.name)}" data-role="name">
+        <button class="icon-btn highlight-toggle-btn ${p.highlight?'active':''}" data-role="toggle-highlight" title="Faire apparaître en rouge dans le récap">●</button>
         <button class="icon-btn" data-role="swap-type" title="Changer de catégorie">⇄</button>
         <button class="icon-btn" data-role="delete-person" title="Supprimer">✕</button>
       </div>`).join("") || `<p style="font-size:13px; color:var(--ink-soft);">Aucun prénom dans cette catégorie.</p>`;
@@ -1236,6 +1305,9 @@ try{
     } else if(e.target.dataset.role==="swap-type"){
       p.type = p.type==='permanent' ? 'interimaire' : 'permanent';
       save(); renderPeopleListPage();
+    } else if(e.target.dataset.role==="toggle-highlight"){
+      p.highlight = !p.highlight;
+      save(); renderPeopleListPage(); renderBoard();
     }
   });
   document.getElementById("addPersonBtn").addEventListener("click", ()=>{
@@ -1245,6 +1317,49 @@ try{
     state.people.push({id:uid(), name, type:peopleTab});
     el.value = "";
     save(); renderPeopleListPage();
+  });
+
+  // ---------- Archives ----------
+  const archivesListEl = document.getElementById("archivesList");
+  const archiveSearchEl = document.getElementById("archiveSearch");
+  const archiveSortEl = document.getElementById("archiveSort");
+
+  function renderArchivesList(){
+    const search = (archiveSearchEl.value||"").toLowerCase().trim();
+    const sortDir = archiveSortEl.value;
+    let list = state.weeks.filter(w=> (w.title||"").toLowerCase().includes(search));
+    list.sort((a,b)=> (a.createdAt||0)-(b.createdAt||0));
+    if(sortDir==="desc") list.reverse();
+
+    if(!list.length){
+      archivesListEl.innerHTML = `<p style="font-size:13px; color:var(--ink-soft);">Aucune semaine trouvée.</p>`;
+      return;
+    }
+    archivesListEl.innerHTML = list.map(w=>{
+      const dateRange = weekDateRange(w);
+      const isActive = w.id === state.activeWeekId;
+      const meta = (dateRange ? dateRange+" · " : "") + (isActive ? "Semaine active" : "Créée le "+formatCreatedAt(w.createdAt));
+      return `
+      <div class="archive-row" data-week-id="${w.id}">
+        <div class="archive-row-info">
+          <span class="archive-row-title">${escapeHtml(w.title||"Sans titre")}</span>
+          <span class="archive-row-meta">${meta}</span>
+        </div>
+        <div class="archive-row-actions">
+          <button class="btn" data-action="open-week" data-week="${w.id}" ${isActive?"disabled":""}>${isActive?"Ouverte":"Ouvrir"}</button>
+        </div>
+      </div>`;
+    }).join("");
+  }
+  archiveSearchEl.addEventListener("input", renderArchivesList);
+  archiveSortEl.addEventListener("change", renderArchivesList);
+  archivesListEl.addEventListener("click", e=>{
+    const btn = e.target.closest("[data-action='open-week']");
+    if(!btn) return;
+    state.activeWeekId = btn.dataset.week;
+    save();
+    switchMainTab("planning");
+    renderAll();
   });
 
   // ---------- Équipe de la semaine modal ----------
@@ -1338,6 +1453,7 @@ try{
     const copy = JSON.parse(JSON.stringify(src));
     copy.id = uid();
     copy.title = (src.title || "Semaine") + " (copie)";
+    copy.createdAt = Date.now();
     copy.days.forEach(d=>{ d.id = uid(); d.blocks.forEach(b=> b.id = uid()); });
     state.weeks.push(copy);
     state.activeWeekId = copy.id;
@@ -1351,6 +1467,31 @@ try{
     save(); renderAll();
   });
   document.getElementById("printBtn").addEventListener("click", ()=> window.print());
+
+  function showSaveToast(text){
+    let toast = document.getElementById("saveToast");
+    if(!toast){
+      toast = document.createElement("div");
+      toast.id = "saveToast";
+      toast.className = "save-toast";
+      document.body.appendChild(toast);
+    }
+    toast.textContent = text;
+    toast.classList.add("show");
+    clearTimeout(toast._hideTimer);
+    toast._hideTimer = setTimeout(()=> toast.classList.remove("show"), 1600);
+  }
+  document.getElementById("saveNowBtn").addEventListener("click", ()=>{
+    save();
+    if(firebaseReady && db && planningDocRef){
+      clearTimeout(fsSaveTimer);
+      setDoc(planningDocRef, state)
+        .then(()=> showSaveToast("Semaine enregistrée ✓"))
+        .catch(()=> showSaveToast("Échec de l'enregistrement en ligne — gardé en local"));
+    } else {
+      showSaveToast("Semaine enregistrée (sur cet appareil) ✓");
+    }
+  });
 
   function csvEscape(v){
     v = String(v==null ? "" : v);
@@ -1405,6 +1546,7 @@ try{
   }
   // Sans config Firebase renseignée, l'app fonctionne comme avant (localStorage uniquement)
 
+  updateToolbarVisibility();
   renderAll();
 })();
 </script>
