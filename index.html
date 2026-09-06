@@ -1,0 +1,1412 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Planning — KYS Marine</title>
+<style>
+  :root{
+    --paper:#F5F1E6;
+    --paper-line:#E4DDC9;
+    --grid-line:#DDD5BE;
+    --ink:#1F2E33;
+    --ink-soft:#5A6B70;
+    --navy:#28404A;
+    --navy-deep:#1B2C33;
+    --card:#FFFFFF;
+    --neutre:#E7E3D8;
+    --neutre-strip:#C9C2AC;
+    --danger:#B4483F;
+    --names-red:#D8232A;
+    --radius:5px;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--paper);
+    color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  h1,h2,h3,.serif{font-family:"Iowan Old Style","Palatino Linotype",Georgia,serif;}
+
+  /* ---------- Toolbar ---------- */
+  .toolbar{
+    position:sticky; top:0; z-index:30;
+    background:var(--navy-deep);
+    color:#EFE9D8;
+    padding:14px 20px;
+    display:flex; align-items:center; gap:14px; flex-wrap:wrap;
+    border-bottom:3px solid #F0C43A;
+  }
+  .toolbar .brand{display:flex; flex-direction:column; margin-right:6px;}
+  .toolbar .brand h1{
+    font-size:22px; margin:0; font-weight:600; letter-spacing:.2px; color:#fff;
+  }
+  .week-title-input{
+    background:transparent; border:none; color:#EFE9D8;
+    font-family:"Iowan Old Style","Palatino Linotype",Georgia,serif;
+    font-size:13px; padding:0; margin-top:2px; width:260px; opacity:.85;
+  }
+  .week-title-input:focus{outline:none; border-bottom:1px solid #EFE9D8; opacity:1;}
+
+  .main-tabs{display:flex; gap:6px; margin-right:auto;}
+  .main-tab{
+    background:transparent; border:1px solid rgba(239,233,216,.35); color:#EFE9D8;
+    padding:8px 16px; border-radius:5px; cursor:pointer; font-size:13.5px;
+  }
+  .main-tab.active{background:#EFE9D8; color:var(--navy-deep); font-weight:700;}
+  .main-tab:hover:not(.active){background:rgba(239,233,216,.14);}
+
+  .toolbar-actions{display:flex; align-items:center; gap:10px; flex-wrap:wrap;}
+
+  .btn{
+    appearance:none; border:1px solid rgba(239,233,216,.35); background:transparent;
+    color:#EFE9D8; padding:8px 13px; border-radius:var(--radius); font-size:13.5px;
+    cursor:pointer; white-space:nowrap; transition:background .15s, color .15s;
+  }
+  .btn:hover{background:rgba(239,233,216,.14);}
+  .btn.primary{background:#F0C43A; border-color:#F0C43A; color:#2A2205; font-weight:600;}
+  .btn.primary:hover{background:#f5cd47;}
+  .btn.danger{border-color:rgba(180,72,63,.55); color:#F1B2AC;}
+  .btn.danger:hover{background:rgba(180,72,63,.25);}
+  select.btn{padding-right:8px;}
+
+  /* ---------- Board ---------- */
+  .board-wrap{padding:20px;}
+  .board{
+    display:flex; gap:14px; align-items:flex-start;
+    overflow-x:auto; padding-bottom:30px;
+  }
+  .day-col{
+    background:var(--card);
+    border:1px solid var(--paper-line);
+    border-radius:6px;
+    flex:0 0 auto;
+    box-shadow:0 1px 0 rgba(0,0,0,.03);
+  }
+  .day-head{
+    padding:12px 12px 8px;
+    border-bottom:2px solid var(--navy);
+  }
+  .day-head-top{display:flex; align-items:baseline; justify-content:space-between; gap:8px;}
+  .day-head input.day-label{
+    font-family:"Iowan Old Style","Palatino Linotype",Georgia,serif;
+    font-size:19px; font-weight:600; color:var(--navy-deep);
+    border:none; background:transparent; width:100%; padding:0; margin:0 0 4px; flex:1; min-width:0;
+  }
+  .day-total-hours{
+    font-size:12px; font-weight:700; color:var(--navy); white-space:nowrap;
+    background:var(--paper); border:1px solid var(--paper-line); border-radius:3px; padding:2px 7px;
+  }
+  .day-head input.day-label:focus{outline:none;}
+  .day-meta{display:flex; flex-direction:column; gap:3px;}
+  .day-meta-row{display:flex; align-items:baseline; gap:6px;}
+  .day-meta-row input{flex:1; min-width:0;}
+  .day-start-time{font-size:11px; color:var(--ink-soft); white-space:nowrap; font-style:italic;}
+  .day-meta input{
+    border:none; border-bottom:1px dotted var(--paper-line); background:transparent;
+    font-size:12px; color:var(--ink-soft); padding:2px 0; width:100%; cursor:text;
+  }
+  .day-meta input:hover{border-bottom-color:var(--ink-soft);}
+  .day-meta input:focus{outline:none; color:var(--ink); border-bottom:1px solid var(--navy);}
+  .day-meta input.coef-field{font-weight:700; color:var(--ink);}
+  .day-meta input.horaire-field{color:var(--names-red); font-weight:600;}
+  .day-recap{
+    margin:0 10px 12px; padding:8px 9px; background:var(--paper); border-radius:4px;
+    border:1px solid var(--paper-line);
+  }
+  .day-recap-line{font-size:11px; color:var(--ink); line-height:1.5;}
+  .day-recap-line b{color:var(--ink-soft); font-weight:700;}
+  .day-col-actions{
+    display:flex; justify-content:space-between; align-items:center; padding:7px 10px;
+    border-bottom:1px solid var(--paper-line);
+  }
+  .lane-ctrl{display:flex; align-items:center; gap:6px; font-size:11.5px; color:var(--ink-soft);}
+  .lane-ctrl button{
+    border:1px solid var(--paper-line); background:#fff; width:20px; height:20px; border-radius:3px;
+    cursor:pointer; font-size:12px; line-height:1; color:var(--navy-deep);
+  }
+  .lane-ctrl button:hover{background:var(--paper);}
+  .icon-btn{
+    border:none; background:none; color:var(--ink-soft); cursor:pointer;
+    font-size:11.5px; padding:3px 5px; border-radius:4px;
+  }
+  .icon-btn:hover{background:var(--paper); color:var(--danger);}
+
+  .time-grid{
+    position:relative; display:grid;
+  }
+  .time-label{
+    font-size:10.5px; color:var(--ink-soft); padding:2px 4px 0 8px;
+    border-right:1px solid var(--paper-line);
+    line-height:1;
+  }
+  .time-label.hour{color:var(--navy-deep); font-weight:700; font-size:11px;}
+
+  .block-card{
+    margin:1px 3px; border-radius:4px; overflow:hidden; border:1px solid rgba(0,0,0,.08);
+    display:flex; flex-direction:column; min-height:0; position:relative;
+    cursor:grab; touch-action:none; user-select:none;
+  }
+  .block-card.dragging{opacity:.35;}
+  .block-ghost{
+    border:2px dashed rgba(27,44,51,.55); border-radius:4px; margin:1px 3px;
+    background:rgba(255,255,255,.35); pointer-events:none;
+  }
+  .resize-handle{position:absolute; left:0; right:0; height:7px; cursor:ns-resize; z-index:2;}
+  .resize-handle.top{top:0;}
+  .resize-handle.bottom{bottom:0;}
+  .resize-handle:hover{background:rgba(255,255,255,.45);}
+  .block-strip{height:4px; flex:0 0 auto;}
+  .block-body{padding:4px 7px 5px; position:relative; overflow:hidden; flex:1 1 auto; min-height:0;}
+  .block-top{display:flex; justify-content:space-between; align-items:baseline; gap:5px;}
+  .block-type{font-weight:700; font-size:11.5px; color:var(--navy-deep);}
+  .block-time{font-size:10px; color:var(--ink-soft); white-space:nowrap;}
+  .block-people{font-size:10.8px; color:var(--names-red); margin-top:2px; font-weight:700; overflow:hidden; text-overflow:ellipsis;}
+  .block-note{font-size:10.8px; color:var(--ink); margin-top:2px; line-height:1.3; white-space:pre-wrap; overflow:hidden;}
+  .block-edit-row{display:flex; gap:4px; margin-top:3px; opacity:0; transition:opacity .12s; position:absolute; top:3px; right:5px; z-index:4;}
+  .block-card:hover .block-edit-row{opacity:1;}
+  .block-edit-row button{
+    border:none; background:rgba(255,255,255,.8); font-size:11px; padding:2px 6px;
+    border-radius:3px; cursor:pointer; color:var(--navy-deep); font-weight:700; line-height:1.4;
+  }
+  .block-edit-row button.delete-btn{color:var(--danger);}
+  .block-edit-row button:hover{background:#fff;}
+
+  .add-block-btn{
+    margin:10px; padding:8px; border:1.5px dashed var(--paper-line);
+    background:transparent; border-radius:4px; color:var(--ink-soft);
+    cursor:pointer; font-size:12.5px; text-align:center;
+  }
+  .add-block-btn:hover{border-color:var(--navy); color:var(--navy);}
+
+  .add-day-col{
+    flex:0 0 150px; min-height:200px; display:flex; align-items:center; justify-content:center;
+    border:1.5px dashed var(--paper-line); border-radius:6px; background:transparent;
+    color:var(--ink-soft); cursor:pointer; font-size:13px; align-self:stretch;
+  }
+  .add-day-col:hover{border-color:var(--navy); color:var(--navy);}
+
+  /* ---------- Legend ---------- */
+  .legend{
+    display:flex; gap:10px; flex-wrap:wrap; padding:14px 20px 0;
+    font-size:12px; color:var(--ink-soft); align-items:center;
+  }
+  .legend span{display:flex; align-items:center; gap:5px;}
+  .legend i{width:10px; height:10px; border-radius:2px; display:inline-block;}
+  .legend .grid-info{margin-left:auto; font-style:italic;}
+  .legend .names-hint b{color:var(--names-red);}
+
+  /* ---------- Team page ---------- */
+  .team-page{max-width:620px; margin:0 auto; padding:32px 20px 60px;}
+  .team-page h2{font-size:24px; margin:0 0 6px; color:var(--navy-deep);}
+  .team-page .modal-sub{font-size:13px; color:var(--ink-soft); margin:0 0 18px;}
+
+  /* ---------- Modal ---------- */
+  .overlay{
+    position:fixed; inset:0; background:rgba(20,28,31,.55); z-index:100;
+    display:none; align-items:center; justify-content:center; padding:20px;
+  }
+  .overlay.open{display:flex;}
+  .modal{
+    background:var(--card); border-radius:8px; width:100%; max-width:440px;
+    max-height:88vh; overflow-y:auto; padding:22px 22px 20px; position:relative;
+  }
+  .modal h2{font-size:19px; margin:0 0 6px; color:var(--navy-deep);}
+  .modal .modal-sub{font-size:12.5px; color:var(--ink-soft); margin:0 0 14px;}
+  .field{margin-bottom:13px;}
+  .field label{display:block; font-size:12px; color:var(--ink-soft); margin-bottom:4px; font-weight:600;}
+  .field input[type=text], .field input[type=number], .field textarea, .field select{
+    width:100%; padding:8px 9px; border:1px solid var(--paper-line); border-radius:4px;
+    font-size:14px; font-family:inherit; color:var(--ink); background:#FBFAF6;
+  }
+  .field textarea{resize:vertical; min-height:52px;}
+  .row-2{display:flex; gap:10px;}
+  .row-2 > div{flex:1;}
+  .type-swatches{display:flex; flex-wrap:wrap; gap:7px;}
+  .type-swatch{
+    padding:6px 10px; border-radius:4px; font-size:12.5px; cursor:pointer;
+    border:2px solid transparent; font-weight:600; color:var(--navy-deep);
+  }
+  .type-swatch.selected{border-color:var(--navy-deep);}
+  .lane-picker{display:flex; gap:6px; flex-wrap:wrap; align-items:center;}
+  .lane-picker .chip{padding:6px 12px;}
+  .chips{display:flex; flex-wrap:wrap; gap:6px;}
+  .chip{
+    padding:5px 10px; border-radius:20px; font-size:12.5px; cursor:pointer;
+    background:var(--paper); border:1px solid var(--paper-line); color:var(--ink);
+  }
+  .chip.selected{background:var(--navy-deep); border-color:var(--navy-deep); color:#fff;}
+  .chip-group-label{font-size:11px; color:var(--ink-soft); font-weight:700; margin:8px 0 4px; width:100%;}
+  .modal-actions{display:flex; justify-content:flex-end; gap:8px; margin-top:16px;}
+  .modal-actions .btn{color:var(--navy-deep); border-color:var(--paper-line);}
+  .modal-actions .btn:hover{background:var(--paper);}
+  .modal-actions .btn.primary{color:#2A2205;}
+  .close-x{
+    position:absolute; top:14px; right:16px; border:none; background:none;
+    font-size:18px; cursor:pointer; color:var(--ink-soft);
+  }
+
+  .tabs{display:flex; gap:6px; margin-bottom:14px;}
+  .tab-btn{
+    padding:7px 15px; border:1px solid var(--paper-line); background:#fff;
+    border-radius:4px; cursor:pointer; font-size:13.5px; color:var(--ink-soft);
+  }
+  .tab-btn.active{background:var(--navy-deep); color:#fff; border-color:var(--navy-deep);}
+
+  .section-label{font-size:11.5px; color:var(--ink-soft); font-weight:700; margin:12px 0 4px;}
+  .section-label:first-child{margin-top:0;}
+
+  .manage-row{
+    display:flex; align-items:center; gap:8px; padding:7px 0;
+    border-bottom:1px solid var(--paper-line);
+  }
+  .manage-row input[type=text]{flex:1; border:none; background:transparent; font-size:14px; padding:3px 0;}
+  .manage-row input[type=color]{width:26px; height:26px; border:none; padding:0; background:none; cursor:pointer;}
+  .manage-row input[type=checkbox]{width:16px; height:16px; cursor:pointer;}
+  .manage-row .icon-btn{color:var(--ink-soft); font-size:14px;}
+  .manage-row span.pname{flex:1; font-size:14px;}
+  .add-inline{display:flex; gap:6px; margin-top:12px;}
+  .add-inline input{flex:1;}
+  .add-inline select{width:auto; flex:0 0 auto;}
+  .add-inline .btn{padding:8px 14px; font-size:13px;}
+
+  .empty-hint{padding:36px 20px; text-align:center; color:var(--ink-soft); font-size:14px;}
+
+  @media print{
+    *{-webkit-print-color-adjust:exact !important; print-color-adjust:exact !important; color-adjust:exact !important;}
+    .toolbar, .legend, .add-block-btn, .add-day-col, .day-col-actions, .block-edit-row, .resize-handle{display:none !important;}
+    body{background:#fff;}
+    .board{overflow:visible; flex-wrap:wrap;}
+    .day-col{break-inside:avoid; box-shadow:none;}
+  }
+</style>
+</head>
+<body>
+
+<div class="toolbar">
+  <div class="brand">
+    <h1 id="weekLabel">Planning</h1>
+    <input class="week-title-input" id="weekTitleInput" placeholder="Titre de la semaine (ex: Semaine du 31/08)">
+  </div>
+  <nav class="main-tabs">
+    <button class="main-tab active" id="tabPlanningBtn" data-page="planning">Planning</button>
+    <button class="main-tab" id="tabTeamBtn" data-page="team">Équipe</button>
+  </nav>
+  <div class="toolbar-actions" id="toolbarActions">
+    <select class="btn" id="weekSelect" title="Charger une semaine enregistrée"></select>
+    <button class="btn" id="newWeekBtn">+ Semaine vierge</button>
+    <button class="btn" id="dupWeekBtn">Dupliquer</button>
+    <button class="btn" id="gridBtn">Grille horaire</button>
+    <button class="btn" id="manageTypesBtn">Modules</button>
+    <button class="btn" id="weekTeamBtn">Équipe semaine</button>
+    <button class="btn danger" id="deleteWeekBtn">Supprimer</button>
+    <button class="btn" id="exportCsvBtn" title="Fichier .csv à importer dans Google Sheets ou Excel">Export CSV</button>
+    <button class="btn primary" id="printBtn">Imprimer / PDF</button>
+  </div>
+</div>
+
+<!-- ============ PLANNING PAGE ============ -->
+<div id="planningPage">
+  <div class="legend" id="legend"></div>
+  <div class="board-wrap">
+    <div class="board" id="board"></div>
+  </div>
+</div>
+
+<!-- ============ TEAM PAGE (onglet à part) ============ -->
+<div id="teamPage" style="display:none;">
+  <div class="team-page">
+    <h2>Équipe</h2>
+    <p class="modal-sub">Ta base complète de prénoms, par catégorie. Renomme, change de catégorie (⇄) ou supprime pour construire ta propre base.</p>
+    <div class="tabs">
+      <button class="tab-btn active" id="tabPermanentBtn" data-tab="permanent">Permanents</button>
+      <button class="tab-btn" id="tabInterimBtn" data-tab="interimaire">Intérimaires</button>
+    </div>
+    <div id="peopleListPage"></div>
+    <div class="add-inline">
+      <input type="text" id="newPersonName" placeholder="Nouveau prénom">
+      <button class="btn primary" id="addPersonBtn" style="color:var(--navy-deep); border:1px solid var(--paper-line); background:var(--paper);">Ajouter</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: add/edit block -->
+<div class="overlay" id="blockOverlay">
+  <div class="modal">
+    <button class="close-x" data-close="blockOverlay">✕</button>
+    <h2 id="blockModalTitle">Ajouter un module</h2>
+    <div class="field">
+      <label>Type de module</label>
+      <div class="type-swatches" id="typeSwatches"></div>
+    </div>
+    <div class="row-2">
+      <div class="field">
+        <label>Début</label>
+        <select id="blockStart"></select>
+      </div>
+      <div class="field">
+        <label>Fin</label>
+        <select id="blockEnd"></select>
+      </div>
+    </div>
+    <div class="field" id="laneField">
+      <label>Colonne</label>
+      <div class="lane-picker" id="lanePicker"></div>
+    </div>
+    <div class="field">
+      <label>Équipe assignée</label>
+      <div class="chips" id="peopleChips"></div>
+    </div>
+    <div class="field">
+      <label>Détails (quantités, notes...)</label>
+      <textarea id="blockNote" placeholder="ex: Pose 400p + calibrage 200p + vendable 150p"></textarea>
+    </div>
+    <div class="modal-actions">
+      <button class="btn" data-close="blockOverlay">Annuler</button>
+      <button class="btn primary" id="saveBlockBtn">Enregistrer</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: manage types -->
+<div class="overlay" id="typesOverlay">
+  <div class="modal">
+    <button class="close-x" data-close="typesOverlay">✕</button>
+    <h2>Modules</h2>
+    <div id="typesList"></div>
+    <div class="add-inline">
+      <input type="color" id="newTypeColor" value="#DDD6C4">
+      <input type="text" id="newTypeName" placeholder="Nouveau module (ex: DDB)">
+      <button class="btn primary" id="addTypeBtn">Ajouter</button>
+    </div>
+    <div class="modal-actions">
+      <button class="btn primary" data-close="typesOverlay">Fermer</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: weekly team (include/exclude + temp add) -->
+<div class="overlay" id="weekTeamOverlay">
+  <div class="modal">
+    <button class="close-x" data-close="weekTeamOverlay">✕</button>
+    <h2>Équipe de la semaine</h2>
+    <p class="modal-sub">Décoche les personnes absentes cette semaine. Ajoute un prénom manquant si besoin.</p>
+    <div id="weekTeamList"></div>
+    <div class="add-inline">
+      <input type="text" id="newWeekPersonName" placeholder="Prénom manquant">
+      <select id="newWeekPersonType">
+        <option value="interimaire" selected>Intérimaire</option>
+        <option value="permanent">Permanent</option>
+      </select>
+      <button class="btn primary" id="addWeekPersonBtn">Ajouter</button>
+    </div>
+    <div class="modal-actions">
+      <button class="btn primary" data-close="weekTeamOverlay">Fermer</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: time grid settings -->
+<div class="overlay" id="gridOverlay">
+  <div class="modal">
+    <button class="close-x" data-close="gridOverlay">✕</button>
+    <h2>Grille horaire</h2>
+    <div class="row-2">
+      <div class="field"><label>Début</label><input type="time" id="gridStart"></div>
+      <div class="field"><label>Fin</label><input type="time" id="gridEnd"></div>
+    </div>
+    <div class="field">
+      <label>Pas</label>
+      <select id="gridStep">
+        <option value="15">15 min</option>
+        <option value="30">30 min</option>
+        <option value="60">1 heure</option>
+      </select>
+    </div>
+    <p style="font-size:12px; color:var(--ink-soft);">S'applique à toute la semaine affichée.</p>
+    <div class="modal-actions">
+      <button class="btn primary" id="saveGridBtn">Appliquer</button>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+// ============================================================
+// FIREBASE — backend pour synchroniser le planning entre postes
+// ============================================================
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
+import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
+import { getAuth, onAuthStateChanged, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
+
+// 🔧 À REMPLACER : colle ici la config de TON projet Firebase
+// (Console Firebase > Paramètres du projet > Tes applications > Config SDK)
+const firebaseConfig = {
+  apiKey: "AIzaSyBuEplCgmFvFVwLqfQZtO7I3E3goToasH0",
+  authDomain: "kys-marine-planning.firebaseapp.com",
+  projectId: "kys-marine-planning",
+  storageBucket: "kys-marine-planning.firebasestorage.app",
+  messagingSenderId: "164503722678",
+  appId: "1:164503722678:web:dd1e53e623836934fd6417"
+};
+
+let fbApp=null, db=null, auth=null, planningDocRef=null;
+try{
+  if(firebaseConfig.apiKey !== "TODO_REMPLACER"){
+    fbApp = initializeApp(firebaseConfig);
+    db = getFirestore(fbApp);
+    auth = getAuth(fbApp);
+    planningDocRef = doc(db, "kys_marine_planning", "main");
+  }
+}catch(e){ console.error("Firebase init error:", e); }
+
+(function(){
+  "use strict";
+  const STORAGE_KEY = "kys_marine_planning_v5";
+  const OLD_STORAGE_KEYS = ["kys_marine_planning_v4","kys_marine_planning_v3"];
+  const uid = () => Math.random().toString(36).slice(2,10);
+  const ROW_H = 29; // px per time slot
+  const EDGE_PX = 30; // px zone near a day's left/right edge that triggers a column split while dragging
+
+  const CORE_TYPES = [
+    {id:"maree",     name:"Marée",     color:"#B4C6E7", strip:"#8FA9D6"},
+    {id:"calibrage", name:"Calibrage", color:"#C5E0B3", strip:"#9FC680"},
+    {id:"criblage",  name:"Criblage",  color:"#C5E0B3", strip:"#9FC680"},
+    {id:"vendable",  name:"Vendable",  color:"#FFE598", strip:"#F0C43A"},
+    {id:"emballage", name:"Emballage", color:"#E7E3D8", strip:"#C9C2AC"},
+    {id:"miseenbac", name:"Mise en bac", color:"#E7E3D8", strip:"#C9C2AC"},
+    {id:"miseenpoche", name:"Mise en poche", color:"#E7E3D8", strip:"#C9C2AC"},
+    {id:"nettoyage", name:"Nettoyage", color:"#E7E3D8", strip:"#C9C2AC"},
+    {id:"pause",     name:"Pause",     color:"#EFEBE0", strip:"#D8D2C0"},
+    {id:"divers",    name:"Divers",    color:"#EFEBE0", strip:"#D8D2C0"}
+  ];
+
+  const DEFAULT_PEOPLE_NAMES = ["Nico","Marc","Matthias","Julian","Kelig","Carad","Louis","Guillaume","Ryan","Swann","Florian","Tudy","PG","Télio","Lucie","Martin"];
+  const DEFAULT_GRID = {start:"04:00", end:"20:30", step:30};
+
+  function strip(hex){
+    hex = hex.replace('#','');
+    if(hex.length===3) hex = hex.split('').map(c=>c+c).join('');
+    const num = parseInt(hex,16);
+    let r=(num>>16)&255, g=(num>>8)&255, b=num&255;
+    r=Math.max(0,r-30); g=Math.max(0,g-30); b=Math.max(0,b-30);
+    return "#"+[r,g,b].map(v=>v.toString(16).padStart(2,'0')).join('');
+  }
+
+  function toMin(t){ const [h,m]=t.split(':').map(Number); return h*60+m; }
+  function fromMin(min){ const h=Math.floor(min/60), m=min%60; return String(h).padStart(2,'0')+':'+String(m).padStart(2,'0'); }
+  function fmtFR(t){ const [h,m]=t.split(':'); return parseInt(h)+'h'+m; }
+
+  function gridTimes(grid){
+    const times = [];
+    for(let m=toMin(grid.start); m<=toMin(grid.end); m+=Number(grid.step)) times.push(fromMin(m));
+    return times;
+  }
+  function slotIndex(grid, t){ return Math.round((toMin(t)-toMin(grid.start))/Number(grid.step)); }
+
+  function fmtDuration(totalMin){
+    if(totalMin<=0) return "0h";
+    const h = Math.floor(totalMin/60), m = totalMin%60;
+    return m ? `${h}h${String(m).padStart(2,'0')}` : `${h}h`;
+  }
+  function dayTotalMinutes(day){
+    const intervals = day.blocks
+      .map(b=>[toMin(b.start), toMin(b.end)])
+      .filter(([s,e])=> e>s)
+      .sort((a,b)=> a[0]-b[0]);
+    if(!intervals.length) return 0;
+    let total = 0, curStart = intervals[0][0], curEnd = intervals[0][1];
+    for(let i=1; i<intervals.length; i++){
+      const [s,e] = intervals[i];
+      if(s <= curEnd){
+        if(e > curEnd) curEnd = e;
+      } else {
+        total += curEnd-curStart;
+        curStart = s; curEnd = e;
+      }
+    }
+    total += curEnd-curStart;
+    return total;
+  }
+  function dayEarliestStart(day){
+    if(!day.blocks.length) return null;
+    let min = null;
+    day.blocks.forEach(b=>{ const t=toMin(b.start); if(min===null || t<min) min=t; });
+    return min===null ? null : fromMin(min);
+  }
+  function dayTeamRecap(day){
+    const names = new Set();
+    day.blocks.forEach(b=> (b.people||[]).forEach(n=> names.add(n)));
+    const perms=[], interims=[];
+    names.forEach(n=>{
+      const p = state.people.find(p=>p.name===n);
+      if(p && p.type==='interimaire') interims.push(n); else perms.push(n);
+    });
+    perms.sort(); interims.sort();
+    return {perms, interims};
+  }
+
+  // Every module occupies exactly one column. This renumbers a day's lanes to
+  // consecutive integers based on what's actually in use (closes gaps automatically,
+  // e.g. after a block is moved out of a column or deleted).
+  function compactDayLanes(day){
+    if(!day.blocks.length){ day.lanes = 1; return; }
+    const used = Array.from(new Set(day.blocks.map(b=>b.lane||0))).sort((a,b)=>a-b);
+    const remap = {};
+    used.forEach((oldLane,i)=>{ remap[oldLane]=i; });
+    day.blocks.forEach(b=>{ b.lane = remap[b.lane||0]; b.laneSpan = 1; });
+    day.lanes = Math.max(1, used.length);
+  }
+
+  function exampleWeek(){
+    const days = [
+      {label:"Lundi", date:"31/08", coef:"coef 92", horaire:"13h41", lanes:2, blocks:[
+        {typeId:"maree", start:"04:00", end:"09:00", lane:0, laneSpan:1, people:["Nico","Marc","Matthias","Julian","Kelig","Carad","Louis","Guillaume"], note:"Marée St Co 7P — Pose 400p + calibrage 200p + vendable 150p"},
+        {typeId:"maree", start:"04:00", end:"08:00", lane:1, laneSpan:1, people:["Marc","Carad","Louis","Guillaume"], note:"Marée Loc 4P — Fin installation parc carré"},
+        {typeId:"calibrage", start:"09:00", end:"12:00", lane:0, laneSpan:1, people:["Matthias","Julian","Guillaume","Kelig"], note:"200P — Arcachonais / P1C"},
+        {typeId:"vendable", start:"09:00", end:"11:00", lane:1, laneSpan:1, people:["Nico","Matthias","Kelig"], note:"1T — Lot à trier de Riantec"},
+        {typeId:"pause", start:"12:00", end:"13:30", lane:0, laneSpan:1, people:[], note:""},
+        {typeId:"emballage", start:"13:30", end:"16:00", lane:0, laneSpan:1, people:["Louis","Marc"], note:"Aide emballage"}
+      ]},
+      {label:"Mardi", date:"01/09", coef:"coef 86", horaire:"14h17", lanes:1, blocks:[
+        {typeId:"maree", start:"04:00", end:"09:30", lane:0, laneSpan:1, people:["Nico","Marc","Matthias","Julian","Kelig","Ryan"], note:"Marée St Co 5P — Pose 300p + crible 200p + calibrage 200p"},
+        {typeId:"criblage", start:"09:30", end:"12:00", lane:0, laneSpan:1, people:["Carad","Kelig","Guillaume","Nico"], note:"150P — nouvelle réserve"},
+        {typeId:"nettoyage", start:"13:00", end:"16:00", lane:0, laneSpan:1, people:[], note:"Nettoyage + prépa ligne"}
+      ]},
+      {label:"Mercredi", date:"02/09", coef:"coef 78", horaire:"14h59", lanes:2, blocks:[
+        {typeId:"maree", start:"04:30", end:"09:00", lane:0, laneSpan:1, people:["Nico","Julian","Matthias","Kelig"], note:"Marée St Co 4P — Pose 200p"},
+        {typeId:"vendable", start:"09:00", end:"10:00", lane:1, laneSpan:1, people:["Carad","Kelig","Guillaume"], note:"1T — Lot à trier de Riantec"},
+        {typeId:"criblage", start:"10:00", end:"12:00", lane:1, laneSpan:1, people:["Matthias","Julian","Guillaume","Kelig"], note:"200P — crible + calibrage 100P"}
+      ]},
+      {label:"Jeudi", date:"03/09", coef:"coef 65", horaire:"15h47", lanes:1, blocks:[
+        {typeId:"maree", start:"04:30", end:"10:00", lane:0, laneSpan:1, people:["Nico","Marc","Julian","Kelig","Carad","Louis","Guillaume"], note:"Marée St Co 6P — Pose crible"},
+        {typeId:"miseenbac", start:"13:00", end:"15:00", lane:0, laneSpan:1, people:[], note:""}
+      ]},
+      {label:"Vendredi", date:"04/09", coef:"coef 54", horaire:"16h46", lanes:1, blocks:[
+        {typeId:"maree", start:"04:30", end:"09:00", lane:0, laneSpan:1, people:["Nico","Marc","Matthias","Kelig"], note:"Marée St Co — Divers"},
+        {typeId:"divers", start:"09:00", end:"11:00", lane:0, laneSpan:1, people:[], note:"Nettoyage, entretien, maintenance, étiquettes transport"}
+      ]},
+      {label:"Samedi", date:"", coef:"coef 101", horaire:"13h33", lanes:1, blocks:[
+        {typeId:"maree", start:"04:30", end:"08:00", lane:0, laneSpan:1, people:["Carad"], note:"Marée St Co 1P — Nettoyage réserve langue"}
+      ]}
+    ];
+    return {id:uid(), title:"Semaine du 31/08 (exemple)", grid:{...DEFAULT_GRID}, excludedPeople:[],
+      days: days.map(d=>({id:uid(), ...d, blocks:d.blocks.map(b=>({id:uid(), ...b}))}))};
+  }
+
+  function blankWeek(){
+    const labels = ["Lundi","Mardi","Mercredi","Jeudi","Vendredi","Samedi"];
+    return {id:uid(), title:"Nouvelle semaine", grid:{...DEFAULT_GRID}, excludedPeople:[],
+      days: labels.map(l=>({id:uid(), label:l, date:"", coef:"", horaire:"", lanes:1, blocks:[]}))};
+  }
+
+  function loadState(){
+    let raw = null;
+    try{ raw = JSON.parse(localStorage.getItem(STORAGE_KEY)); }catch(e){}
+    if(!raw){
+      for(const key of OLD_STORAGE_KEYS){
+        try{ raw = JSON.parse(localStorage.getItem(key)); }catch(e){}
+        if(raw) break;
+      }
+    }
+    if(raw && raw.weeks && raw.weeks.length){
+      if(!raw.types) raw.types = CORE_TYPES.slice();
+      if(!raw.people) raw.people = [];
+      raw.people = raw.people.map(p => typeof p === 'string' ? {id:uid(), name:p, type:'permanent'} : p);
+      raw.weeks.forEach(w=>{
+        if(!w.grid) w.grid = {...DEFAULT_GRID};
+        if(!w.excludedPeople) w.excludedPeople = [];
+        w.days.forEach(d=>{ if(!d.lanes) d.lanes=1; compactDayLanes(d); });
+      });
+      return raw;
+    }
+    const w = exampleWeek();
+    return {
+      types: CORE_TYPES.slice(),
+      people: DEFAULT_PEOPLE_NAMES.map(name=>({id:uid(), name, type:'permanent'})),
+      weeks:[w], activeWeekId:w.id
+    };
+  }
+
+  let state = loadState();
+  let firebaseReady = false;
+  let fsSaveTimer = null;
+
+  function save(){
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    if(!firebaseReady || !db) return;
+    clearTimeout(fsSaveTimer);
+    fsSaveTimer = setTimeout(()=>{
+      setDoc(planningDocRef, state).catch(err=> console.error("Échec d'enregistrement Firestore:", err));
+    }, 500);
+  }
+
+  function attachPlanningSync(){
+    if(!db) return;
+    onSnapshot(planningDocRef, snap=>{
+      if(snap.metadata.hasPendingWrites) return; // ignore nos propres écritures en cours
+      if(!snap.exists()){
+        setDoc(planningDocRef, state).catch(err=> console.error("Échec d'initialisation Firestore:", err));
+        return;
+      }
+      const remote = snap.data();
+      if(remote && Array.isArray(remote.weeks) && remote.weeks.length){
+        state = remote;
+        if(!state.activeWeekId || !state.weeks.find(w=>w.id===state.activeWeekId)){
+          state.activeWeekId = state.weeks[0].id;
+        }
+        renderAll();
+      }
+    }, err=> console.error("Erreur de synchronisation Firestore:", err));
+  }
+  function activeWeek(){ return state.weeks.find(w=>w.id===state.activeWeekId) || state.weeks[0]; }
+  function typeById(id){ return state.types.find(t=>t.id===id) || {id:"", name:"?", color:"#E7E3D8", strip:"#C9C2AC"}; }
+
+  const boardEl = document.getElementById("board");
+  const legendEl = document.getElementById("legend");
+  const weekSelect = document.getElementById("weekSelect");
+  const weekTitleInput = document.getElementById("weekTitleInput");
+
+  function escapeHtml(s){
+    return (s||"").replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+  }
+
+  // ---------- Main tabs: Planning / Équipe ----------
+  const planningPage = document.getElementById("planningPage");
+  const teamPage = document.getElementById("teamPage");
+  const toolbarActions = document.getElementById("toolbarActions");
+  document.getElementById("tabPlanningBtn").addEventListener("click", ()=> switchMainTab("planning"));
+  document.getElementById("tabTeamBtn").addEventListener("click", ()=> switchMainTab("team"));
+  function switchMainTab(page){
+    document.getElementById("tabPlanningBtn").classList.toggle("active", page==="planning");
+    document.getElementById("tabTeamBtn").classList.toggle("active", page==="team");
+    planningPage.style.display = page==="planning" ? "" : "none";
+    teamPage.style.display = page==="team" ? "" : "none";
+    toolbarActions.style.display = page==="planning" ? "" : "none";
+    if(page==="team") renderPeopleListPage();
+  }
+
+  function renderLegend(){
+    const week = activeWeek();
+    legendEl.innerHTML = state.types.map(t=>
+      `<span><i style="background:${t.color}"></i>${escapeHtml(t.name)}</span>`
+    ).join("") + `<span class="names-hint"><b>■</b> Noms de l'équipe</span>`
+      + (week ? `<span class="grid-info">double-clic = modifier · glisser = déplacer · vers un autre jour = dupliquer · bord du jour = colonne · haut/bas du module = régler l'horaire</span>` : "");
+  }
+
+  function renderWeekSelect(){
+    weekSelect.innerHTML = state.weeks.map(w=>
+      `<option value="${w.id}" ${w.id===state.activeWeekId?"selected":""}>${escapeHtml(w.title||"Sans titre")}</option>`
+    ).join("");
+  }
+
+  function renderBoard(){
+    const week = activeWeek();
+    if(!week){ boardEl.innerHTML = `<div class="empty-hint">Aucune semaine. Cliquez sur "+ Semaine vierge" pour commencer.</div>`; return; }
+    weekTitleInput.value = week.title || "";
+
+    const times = gridTimes(week.grid);
+    const totalRows = times.length - 1;
+
+    boardEl.innerHTML = week.days.map(day=>{
+      const lanes = day.lanes || 1;
+      const colWidth = 54 + lanes*128;
+
+      const labelsHtml = times.slice(0,-1).map((t,i)=>{
+        const isHour = t.endsWith(':00');
+        return `<div class="time-label ${isHour?'hour':''}" style="grid-column:1; grid-row:${i+1};">${fmtFR(t)}</div>`;
+      }).join("");
+
+      const blocksHtml = day.blocks.map(b=>{
+        const t = typeById(b.typeId);
+        const startRow = Math.max(0, slotIndex(week.grid, b.start));
+        const endRow = Math.min(totalRows, slotIndex(week.grid, b.end));
+        const span = Math.max(1, endRow-startRow);
+        const lane = Math.min(b.lane||0, lanes-1);
+        return `
+        <div class="block-card" data-block-id="${b.id}" style="background:${t.color}; grid-column:${lane+2} / span 1; grid-row:${startRow+1} / span ${span};">
+          <div class="resize-handle top" data-resize="top"></div>
+          <div class="resize-handle bottom" data-resize="bottom"></div>
+          <div class="block-strip" style="background:${t.strip}"></div>
+          <div class="block-body">
+            <div class="block-edit-row">
+              <button data-action="edit-block" data-day="${day.id}" data-block="${b.id}" title="Modifier">✎</button>
+              <button class="delete-btn" data-action="delete-block" data-day="${day.id}" data-block="${b.id}" title="Supprimer">✕</button>
+            </div>
+            <div class="block-top">
+              <span class="block-type">${escapeHtml(t.name)}</span>
+              <span class="block-time">${fmtFR(b.start)}-${fmtFR(b.end)}</span>
+            </div>
+            ${b.people && b.people.length ? `<div class="block-people">${b.people.map(escapeHtml).join(", ")}</div>` : ""}
+            ${b.note ? `<div class="block-note">${escapeHtml(b.note)}</div>` : ""}
+          </div>
+        </div>`;
+      }).join("");
+
+      const gridStyle = `grid-template-columns:54px repeat(${lanes}, 1fr); grid-auto-rows:${ROW_H}px; background-image: repeating-linear-gradient(to bottom, var(--grid-line) 0, var(--grid-line) 1px, transparent 1px, transparent ${ROW_H}px);`;
+
+      const totalMin = dayTotalMinutes(day);
+      const earliestStart = dayEarliestStart(day);
+      const recap = dayTeamRecap(day);
+      const recapHtml = (recap.perms.length || recap.interims.length) ? `
+        <div class="day-recap">
+          ${recap.perms.length ? `<div class="day-recap-line"><b>Personnel :</b> ${recap.perms.map(escapeHtml).join(", ")}</div>` : ""}
+          ${recap.interims.length ? `<div class="day-recap-line"><b>Intérimaires :</b> ${recap.interims.map(escapeHtml).join(", ")}</div>` : ""}
+        </div>` : "";
+
+      return `
+      <div class="day-col" style="width:${colWidth}px;" data-day-id="${day.id}">
+        <div class="day-head">
+          <div class="day-head-top">
+            <input class="day-label" data-field="label" data-day="${day.id}" value="${escapeHtml(day.label)}" placeholder="Jour">
+            <span class="day-total-hours" title="Heure de début du premier module de la journée">${earliestStart ? fmtFR(earliestStart) : ""}</span>
+          </div>
+          <div class="day-meta">
+            <div class="day-meta-row">
+              <input data-field="date" data-day="${day.id}" value="${escapeHtml(day.date)}" placeholder="Date (ex: 31/08)">
+              <span class="day-start-time" title="Total des heures de tous les modules de la journée">${totalMin>0 ? "Total Day : "+fmtDuration(totalMin) : ""}</span>
+            </div>
+            <input class="coef-field" data-field="coef" data-day="${day.id}" value="${escapeHtml(day.coef)}" placeholder="Coef marée">
+            <input class="horaire-field" data-field="horaire" data-day="${day.id}" value="${escapeHtml(day.horaire)}" placeholder="Horaire marée">
+          </div>
+        </div>
+        <div class="day-col-actions">
+          <div class="lane-ctrl">
+            Colonnes
+            <button data-action="lane-minus" data-day="${day.id}">−</button>
+            <span>${lanes}</span>
+            <button data-action="lane-plus" data-day="${day.id}">+</button>
+          </div>
+          <button class="icon-btn" data-action="delete-day" data-day="${day.id}" title="Supprimer ce jour">✕ jour</button>
+        </div>
+        <div class="time-grid" style="${gridStyle}">${labelsHtml}${blocksHtml}</div>
+        <button class="add-block-btn" data-action="add-block" data-day="${day.id}">+ Ajouter un module</button>
+        ${recapHtml}
+      </div>`;
+    }).join("") + `<div class="add-day-col" id="addDayBtn">+ Ajouter<br>un jour</div>`;
+
+    document.getElementById("addDayBtn").addEventListener("click", ()=>{
+      week.days.push({id:uid(), label:"Nouveau jour", date:"", coef:"", horaire:"", lanes:1, blocks:[]});
+      save(); renderBoard();
+    });
+  }
+
+  function renderAll(){ renderLegend(); renderWeekSelect(); renderBoard(); }
+
+  boardEl.addEventListener("input", e=>{
+    const field = e.target.dataset.field;
+    if(!field) return;
+    const dayId = e.target.dataset.day;
+    const day = activeWeek().days.find(d=>d.id===dayId);
+    if(!day) return;
+    day[field] = e.target.value;
+    save();
+  });
+
+  boardEl.addEventListener("click", e=>{
+    const btn = e.target.closest("[data-action]");
+    if(!btn) return;
+    const action = btn.dataset.action;
+    const week = activeWeek();
+    const dayId = btn.dataset.day;
+    const day = week.days.find(d=>d.id===dayId);
+
+    if(action === "add-block"){
+      openBlockModal(day, null);
+    } else if(action === "edit-block"){
+      const block = day.blocks.find(b=>b.id===btn.dataset.block);
+      openBlockModal(day, block);
+    } else if(action === "delete-block"){
+      if(confirm("Supprimer ce module ?")){
+        day.blocks = day.blocks.filter(b=>b.id!==btn.dataset.block);
+        compactDayLanes(day);
+        save(); renderBoard();
+      }
+    } else if(action === "delete-day"){
+      if(confirm("Supprimer ce jour et tous ses modules ?")){
+        week.days = week.days.filter(d=>d.id!==dayId);
+        save(); renderBoard();
+      }
+    } else if(action === "lane-plus"){
+      day.lanes = Math.min(3, (day.lanes||1)+1);
+      save(); renderBoard();
+    } else if(action === "lane-minus"){
+      const newLanes = Math.max(1, (day.lanes||1)-1);
+      day.blocks.forEach(b=>{ if((b.lane||0) >= newLanes) b.lane = newLanes-1; });
+      day.lanes = newLanes;
+      compactDayLanes(day);
+      save(); renderBoard();
+    }
+  });
+
+  boardEl.addEventListener("dblclick", e=>{
+    const card = e.target.closest(".block-card");
+    if(!card) return;
+    if(e.target.closest(".block-edit-row")) return;
+    const dayCol = card.closest(".day-col");
+    const week = activeWeek();
+    const day = week.days.find(d=>d.id===dayCol.dataset.dayId);
+    const block = day.blocks.find(b=>b.id===card.dataset.blockId);
+    if(block) openBlockModal(day, block);
+  });
+
+  boardEl.addEventListener("contextmenu", e=>{
+    if(e.target.closest(".block-card")) return; // right-click on an existing module: default menu
+    const gridEl = e.target.closest(".time-grid");
+    if(!gridEl) return;
+    e.preventDefault();
+    const dayCol = gridEl.closest(".day-col");
+    const week = activeWeek();
+    const day = week.days.find(d=>d.id===dayCol.dataset.dayId);
+    if(!day) return;
+    const gridRect = gridEl.getBoundingClientRect();
+    const totalRows = gridTimes(week.grid).length - 1;
+    const lanes = day.lanes || 1;
+
+    let row = Math.floor((e.clientY-gridRect.top)/ROW_H);
+    row = Math.max(0, Math.min(totalRows-1, row));
+    const laneWidth = (gridRect.width-54)/lanes;
+    let lane = Math.floor((e.clientX-gridRect.left-54)/laneWidth);
+    lane = Math.max(0, Math.min(lanes-1, lane));
+
+    const startTime = fromMin(toMin(week.grid.start) + row*Number(week.grid.step));
+    openBlockModal(day, null, {start:startTime, lane});
+  });
+
+  // ---------- Drag: move / duplicate / edge-split columns / resize ----------
+  let drag = null;
+
+  boardEl.addEventListener("pointerdown", e=>{
+    const resizeHandle = e.target.closest("[data-resize]");
+    const card = e.target.closest(".block-card");
+    if(!card) return;
+    if(!resizeHandle && e.target.closest(".block-edit-row")) return;
+
+    const dayCol = card.closest(".day-col");
+    const week = activeWeek();
+    const day = week.days.find(d=>d.id===dayCol.dataset.dayId);
+    const block = day.blocks.find(b=>b.id===card.dataset.blockId);
+    if(!block) return;
+
+    const gridEl = dayCol.querySelector(".time-grid");
+    const gridRect = gridEl.getBoundingClientRect();
+    const totalRows = gridTimes(week.grid).length - 1;
+    const startRow = slotIndex(week.grid, block.start);
+    const endRow = slotIndex(week.grid, block.end);
+
+    if(resizeHandle){
+      drag = {
+        mode: resizeHandle.dataset.resize==='top' ? 'resize-top' : 'resize-bottom',
+        card, day, block, gridRect, totalRows,
+        origStartRow:startRow, origEndRow:endRow, newStartRow:startRow, newEndRow:endRow,
+        pointerId:e.pointerId, moved:false, startX:e.clientX, startY:e.clientY
+      };
+    } else {
+      const cardRect = card.getBoundingClientRect();
+      drag = {
+        mode:'move',
+        pointerId:e.pointerId, card, sourceDay:day, block,
+        grabX:e.clientX-cardRect.left, grabY:e.clientY-cardRect.top,
+        span: Math.max(1, endRow-startRow),
+        moved:false, startX:e.clientX, startY:e.clientY,
+        ghost:null, targetDay:null, targetRow:0, targetLaneRequest:0,
+        lastGridEl:null, lastGridOrigTemplate:undefined
+      };
+    }
+    card.setPointerCapture(e.pointerId);
+  });
+
+  boardEl.addEventListener("pointermove", e=>{
+    if(!drag || e.pointerId!==drag.pointerId) return;
+    const dx = e.clientX-drag.startX, dy = e.clientY-drag.startY;
+    if(!drag.moved && Math.hypot(dx,dy) < 4) return;
+    drag.moved = true;
+
+    if(drag.mode === 'move'){
+      drag.card.classList.add("dragging");
+      const week = activeWeek();
+      const totalRows = gridTimes(week.grid).length - 1;
+      const topLeftX = e.clientX - drag.grabX;
+      const topLeftY = e.clientY - drag.grabY;
+
+      let hoveredCol = null;
+      document.querySelectorAll(".day-col").forEach(col=>{
+        const r = col.getBoundingClientRect();
+        if(e.clientX >= r.left && e.clientX <= r.right) hoveredCol = col;
+      });
+      if(!hoveredCol) return;
+
+      const day = week.days.find(d=>d.id===hoveredCol.dataset.dayId);
+      const gridEl = hoveredCol.querySelector(".time-grid");
+      const gridRect = gridEl.getBoundingClientRect();
+      const baseLanes = day.lanes||1;
+
+      let laneRequest, expand=null, previewLanes=baseLanes, previewIndex;
+      if(baseLanes<3 && e.clientX > gridRect.right - EDGE_PX){
+        laneRequest = baseLanes; expand='right'; previewLanes = baseLanes+1; previewIndex = baseLanes;
+      } else if(baseLanes<3 && e.clientX < gridRect.left + 54 + EDGE_PX){
+        laneRequest = -1; expand='left'; previewLanes = baseLanes+1; previewIndex = 0;
+      } else {
+        const laneWidth = (gridRect.width-54)/baseLanes;
+        let l = Math.round((topLeftX-gridRect.left-54)/laneWidth);
+        laneRequest = Math.max(0, Math.min(baseLanes-1, l));
+        previewIndex = laneRequest;
+      }
+
+      if(drag.lastGridEl && drag.lastGridEl !== gridEl && drag.lastGridOrigTemplate!==undefined){
+        drag.lastGridEl.style.gridTemplateColumns = drag.lastGridOrigTemplate;
+      }
+      if(gridEl !== drag.lastGridEl){
+        drag.lastGridOrigTemplate = gridEl.style.gridTemplateColumns;
+        drag.lastGridEl = gridEl;
+      }
+      gridEl.style.gridTemplateColumns = `54px repeat(${previewLanes}, 1fr)`;
+
+      let row = Math.round((topLeftY-gridRect.top)/ROW_H);
+      row = Math.max(0, Math.min(totalRows-drag.span, row));
+
+      drag.targetDay = day; drag.targetRow = row; drag.targetLaneRequest = laneRequest;
+
+      if(!drag.ghost){ drag.ghost = document.createElement("div"); drag.ghost.className = "block-ghost"; }
+      if(drag.ghost.parentElement !== gridEl) gridEl.appendChild(drag.ghost);
+      drag.ghost.style.gridColumn = (previewIndex+2)+" / span 1";
+      drag.ghost.style.gridRow = (row+1)+" / span "+drag.span;
+
+    } else {
+      // resize-top / resize-bottom
+      const rowPos = Math.round((e.clientY - drag.gridRect.top)/ROW_H);
+      if(drag.mode === 'resize-top'){
+        drag.newStartRow = Math.max(0, Math.min(drag.origEndRow-1, rowPos));
+        drag.newEndRow = drag.origEndRow;
+      } else {
+        drag.newEndRow = Math.min(drag.totalRows, Math.max(drag.origStartRow+1, rowPos));
+        drag.newStartRow = drag.origStartRow;
+      }
+      drag.card.style.gridRow = (drag.newStartRow+1)+" / span "+Math.max(1, drag.newEndRow-drag.newStartRow);
+    }
+  });
+
+  function endDrag(){
+    if(!drag) return;
+    drag.card.classList.remove("dragging");
+    if(drag.ghost) drag.ghost.remove();
+
+    if(drag.mode === 'move' && drag.moved && drag.targetDay){
+      const week = activeWeek();
+      const newStartMin = toMin(week.grid.start) + drag.targetRow*Number(week.grid.step);
+      const newStart = fromMin(newStartMin);
+      const newEnd = fromMin(newStartMin + drag.span*Number(week.grid.step));
+
+      if(drag.targetDay.id === drag.sourceDay.id){
+        drag.block.start = newStart; drag.block.end = newEnd;
+        drag.block.lane = drag.targetLaneRequest;
+        compactDayLanes(drag.targetDay);
+      } else {
+        const copy = {...drag.block, id:uid(), people:[...drag.block.people],
+          start:newStart, end:newEnd, lane:drag.targetLaneRequest, laneSpan:1};
+        drag.targetDay.blocks.push(copy);
+        compactDayLanes(drag.targetDay);
+      }
+      save();
+    } else if(drag.mode !== 'move' && drag.moved){
+      const week = activeWeek();
+      const newStartMin = toMin(week.grid.start) + drag.newStartRow*Number(week.grid.step);
+      const newEndMin = toMin(week.grid.start) + drag.newEndRow*Number(week.grid.step);
+      drag.block.start = fromMin(newStartMin);
+      drag.block.end = fromMin(newEndMin);
+      save();
+    }
+    if(drag.moved) renderBoard();
+    drag = null;
+  }
+  boardEl.addEventListener("pointerup", e=>{ if(drag && e.pointerId===drag.pointerId) endDrag(); });
+  boardEl.addEventListener("pointercancel", e=>{ if(drag && e.pointerId===drag.pointerId) endDrag(); });
+
+  // ---------- Block modal ----------
+  const blockOverlay = document.getElementById("blockOverlay");
+  const typeSwatchesEl = document.getElementById("typeSwatches");
+  const peopleChipsEl = document.getElementById("peopleChips");
+  const blockStartEl = document.getElementById("blockStart");
+  const blockEndEl = document.getElementById("blockEnd");
+  const blockNoteEl = document.getElementById("blockNote");
+  const lanePickerEl = document.getElementById("lanePicker");
+  const laneFieldEl = document.getElementById("laneField");
+  let editingCtx = {day:null, block:null, selectedType:null, selectedPeople:new Set(), lane:0};
+
+  function availablePeopleForWeek(week, block){
+    const excluded = week.excludedPeople || [];
+    return state.people.filter(p => !excluded.includes(p.name) || (block && block.people.includes(p.name)));
+  }
+
+  function openBlockModal(day, block, preset){
+    const week = activeWeek();
+    editingCtx.day = day;
+    editingCtx.block = block;
+    editingCtx.selectedType = block ? block.typeId : (state.types[0] && state.types[0].id);
+    editingCtx.selectedPeople = new Set(block ? block.people : []);
+    editingCtx.lane = block ? (block.lane||0) : (preset && preset.lane!=null ? preset.lane : 0);
+
+    document.getElementById("blockModalTitle").textContent = block ? "Modifier le module" : "Ajouter un module";
+    const times = gridTimes(week.grid);
+    blockStartEl.innerHTML = times.slice(0,-1).map(t=>`<option value="${t}">${fmtFR(t)}</option>`).join("");
+    blockEndEl.innerHTML = times.slice(1).map(t=>`<option value="${t}">${fmtFR(t)}</option>`).join("");
+    const startVal = block ? block.start : ((preset && preset.start) || times[0]);
+    const startIdx = Math.max(0, times.indexOf(startVal));
+    blockStartEl.value = startVal;
+    blockEndEl.value = block ? block.end : times[Math.min(startIdx+2, times.length-1)];
+    blockNoteEl.value = block ? block.note : "";
+
+    const lanes = day.lanes || 1;
+    if(lanes <= 1){
+      laneFieldEl.style.display = "none";
+      editingCtx.lane = 0;
+    } else {
+      laneFieldEl.style.display = "";
+      renderLanePicker(lanes);
+    }
+
+    renderTypeSwatches();
+    renderPeopleChips(week);
+    blockOverlay.classList.add("open");
+  }
+
+  function renderLanePicker(lanes){
+    lanePickerEl.innerHTML = Array.from({length:lanes}).map((_,i)=>
+      `<div class="chip ${editingCtx.lane===i?'selected':''}" data-lane="${i}">Colonne ${i+1}</div>`
+    ).join("");
+  }
+  lanePickerEl.addEventListener("click", e=>{
+    const el = e.target.closest(".chip");
+    if(!el) return;
+    editingCtx.lane = Number(el.dataset.lane);
+    renderLanePicker(editingCtx.day.lanes||1);
+  });
+
+  function renderTypeSwatches(){
+    typeSwatchesEl.innerHTML = state.types.map(t=>
+      `<div class="type-swatch ${t.id===editingCtx.selectedType?'selected':''}" style="background:${t.color}" data-type="${t.id}">${escapeHtml(t.name)}</div>`
+    ).join("");
+  }
+  typeSwatchesEl.addEventListener("click", e=>{
+    const el = e.target.closest(".type-swatch");
+    if(!el) return;
+    editingCtx.selectedType = el.dataset.type;
+    renderTypeSwatches();
+  });
+
+  function chipsGroupHtml(list){
+    return list.map(p=>
+      `<div class="chip ${editingCtx.selectedPeople.has(p.name)?'selected':''}" data-name="${escapeHtml(p.name)}">${escapeHtml(p.name)}</div>`
+    ).join("");
+  }
+  function renderPeopleChips(week){
+    const names = availablePeopleForWeek(week, editingCtx.block);
+    const perms = names.filter(p=>p.type==='permanent');
+    const interims = names.filter(p=>p.type==='interimaire');
+    let html = "";
+    if(perms.length) html += `<div class="chip-group-label">Permanents</div>` + chipsGroupHtml(perms);
+    if(interims.length) html += `<div class="chip-group-label">Intérimaires</div>` + chipsGroupHtml(interims);
+    peopleChipsEl.innerHTML = html || `<span style="font-size:12.5px; color:var(--ink-soft);">Aucun prénom actif cette semaine — vérifie "Équipe semaine".</span>`;
+  }
+  peopleChipsEl.addEventListener("click", e=>{
+    const el = e.target.closest(".chip");
+    if(!el) return;
+    const name = el.dataset.name;
+    if(editingCtx.selectedPeople.has(name)) editingCtx.selectedPeople.delete(name);
+    else editingCtx.selectedPeople.add(name);
+    renderPeopleChips(activeWeek());
+  });
+
+  document.getElementById("saveBlockBtn").addEventListener("click", ()=>{
+    if(!editingCtx.selectedType){ alert("Choisissez un type de module."); return; }
+    const day = editingCtx.day;
+    let start = blockStartEl.value, end = blockEndEl.value;
+    if(toMin(end) <= toMin(start)){
+      const week = activeWeek();
+      end = fromMin(toMin(start) + Number(week.grid.step));
+    }
+    const lanes = day.lanes || 1;
+    const lane = lanes>1 ? editingCtx.lane : 0;
+
+    const data = {
+      typeId: editingCtx.selectedType,
+      start, end, lane, laneSpan:1,
+      people: Array.from(editingCtx.selectedPeople),
+      note: blockNoteEl.value.trim()
+    };
+    if(editingCtx.block){
+      Object.assign(editingCtx.block, data);
+    } else {
+      day.blocks.push({id:uid(), ...data});
+    }
+    compactDayLanes(day);
+    save();
+    closeOverlay("blockOverlay");
+    renderBoard();
+  });
+
+  // ---------- Types modal ----------
+  const typesOverlay = document.getElementById("typesOverlay");
+  const typesListEl = document.getElementById("typesList");
+  function renderTypesList(){
+    typesListEl.innerHTML = state.types.map(t=>`
+      <div class="manage-row" data-type="${t.id}">
+        <input type="color" value="${t.color}" data-role="color">
+        <input type="text" value="${escapeHtml(t.name)}" data-role="name">
+        <button class="icon-btn" data-role="delete-type" title="Supprimer">✕</button>
+      </div>`).join("");
+  }
+  typesListEl.addEventListener("input", e=>{
+    const row = e.target.closest(".manage-row");
+    if(!row) return;
+    const t = state.types.find(t=>t.id===row.dataset.type);
+    if(!t) return;
+    if(e.target.dataset.role==="name") t.name = e.target.value;
+    if(e.target.dataset.role==="color"){ t.color = e.target.value; t.strip = strip(e.target.value); }
+    save(); renderLegend(); renderBoard();
+  });
+  typesListEl.addEventListener("click", e=>{
+    if(e.target.dataset.role!=="delete-type") return;
+    const row = e.target.closest(".manage-row");
+    const id = row.dataset.type;
+    if(confirm("Supprimer ce module ?")){
+      state.types = state.types.filter(t=>t.id!==id);
+      save(); renderTypesList(); renderLegend(); renderBoard();
+    }
+  });
+  document.getElementById("addTypeBtn").addEventListener("click", ()=>{
+    const nameEl = document.getElementById("newTypeName");
+    const colorEl = document.getElementById("newTypeColor");
+    const name = nameEl.value.trim();
+    if(!name) return;
+    state.types.push({id:uid(), name, color:colorEl.value, strip:strip(colorEl.value)});
+    nameEl.value = "";
+    save(); renderTypesList(); renderLegend();
+  });
+
+  // ---------- Équipe page (onglet à part) : Permanents / Intérimaires ----------
+  const peopleListPageEl = document.getElementById("peopleListPage");
+  let peopleTab = 'permanent';
+
+  function renderPeopleListPage(){
+    const list = state.people.filter(p=>p.type===peopleTab);
+    peopleListPageEl.innerHTML = list.map(p=>`
+      <div class="manage-row" data-id="${p.id}">
+        <input type="text" value="${escapeHtml(p.name)}" data-role="name">
+        <button class="icon-btn" data-role="swap-type" title="Changer de catégorie">⇄</button>
+        <button class="icon-btn" data-role="delete-person" title="Supprimer">✕</button>
+      </div>`).join("") || `<p style="font-size:13px; color:var(--ink-soft);">Aucun prénom dans cette catégorie.</p>`;
+  }
+  document.getElementById("tabPermanentBtn").addEventListener("click", ()=>{
+    peopleTab = 'permanent';
+    document.getElementById("tabPermanentBtn").classList.add("active");
+    document.getElementById("tabInterimBtn").classList.remove("active");
+    renderPeopleListPage();
+  });
+  document.getElementById("tabInterimBtn").addEventListener("click", ()=>{
+    peopleTab = 'interimaire';
+    document.getElementById("tabInterimBtn").classList.add("active");
+    document.getElementById("tabPermanentBtn").classList.remove("active");
+    renderPeopleListPage();
+  });
+  peopleListPageEl.addEventListener("input", e=>{
+    if(e.target.dataset.role!=="name") return;
+    const row = e.target.closest(".manage-row");
+    const p = state.people.find(p=>p.id===row.dataset.id);
+    if(!p) return;
+    const oldName = p.name, newName = e.target.value;
+    p.name = newName;
+    if(oldName !== newName){
+      state.weeks.forEach(w=>{
+        w.excludedPeople = (w.excludedPeople||[]).map(n=> n===oldName ? newName : n);
+        w.days.forEach(d=> d.blocks.forEach(b=>{ b.people = b.people.map(n=> n===oldName ? newName : n); }));
+      });
+    }
+    save();
+  });
+  peopleListPageEl.addEventListener("click", e=>{
+    const row = e.target.closest(".manage-row");
+    if(!row) return;
+    const p = state.people.find(p=>p.id===row.dataset.id);
+    if(!p) return;
+    if(e.target.dataset.role==="delete-person"){
+      state.people = state.people.filter(x=>x.id!==p.id);
+      save(); renderPeopleListPage();
+    } else if(e.target.dataset.role==="swap-type"){
+      p.type = p.type==='permanent' ? 'interimaire' : 'permanent';
+      save(); renderPeopleListPage();
+    }
+  });
+  document.getElementById("addPersonBtn").addEventListener("click", ()=>{
+    const el = document.getElementById("newPersonName");
+    const name = el.value.trim();
+    if(!name || state.people.some(p=>p.name===name)) return;
+    state.people.push({id:uid(), name, type:peopleTab});
+    el.value = "";
+    save(); renderPeopleListPage();
+  });
+
+  // ---------- Équipe de la semaine modal ----------
+  const weekTeamOverlay = document.getElementById("weekTeamOverlay");
+  const weekTeamListEl = document.getElementById("weekTeamList");
+  function weekTeamGroupHtml(list, excluded){
+    return list.map(p=>`
+      <div class="manage-row" data-name="${escapeHtml(p.name)}">
+        <input type="checkbox" ${excluded.includes(p.name)?"":"checked"} data-role="toggle-active">
+        <span class="pname">${escapeHtml(p.name)}</span>
+      </div>`).join("");
+  }
+  function renderWeekTeamList(){
+    const week = activeWeek();
+    const excluded = week.excludedPeople || [];
+    const perms = state.people.filter(p=>p.type==='permanent');
+    const interims = state.people.filter(p=>p.type==='interimaire');
+    let html = "";
+    if(perms.length) html += `<div class="section-label">Permanents</div>` + weekTeamGroupHtml(perms, excluded);
+    if(interims.length) html += `<div class="section-label">Intérimaires</div>` + weekTeamGroupHtml(interims, excluded);
+    weekTeamListEl.innerHTML = html || `<p style="font-size:13px; color:var(--ink-soft);">Aucun prénom dans la base équipe pour l'instant.</p>`;
+  }
+  weekTeamListEl.addEventListener("change", e=>{
+    if(e.target.dataset.role!=="toggle-active") return;
+    const row = e.target.closest(".manage-row");
+    const name = row.dataset.name;
+    const week = activeWeek();
+    week.excludedPeople = week.excludedPeople || [];
+    if(e.target.checked){
+      week.excludedPeople = week.excludedPeople.filter(n=>n!==name);
+    } else if(!week.excludedPeople.includes(name)){
+      week.excludedPeople.push(name);
+    }
+    save(); renderLegend();
+  });
+  document.getElementById("addWeekPersonBtn").addEventListener("click", ()=>{
+    const el = document.getElementById("newWeekPersonName");
+    const typeEl = document.getElementById("newWeekPersonType");
+    const name = el.value.trim();
+    if(!name) return;
+    if(!state.people.some(p=>p.name===name)) state.people.push({id:uid(), name, type:typeEl.value});
+    const week = activeWeek();
+    week.excludedPeople = (week.excludedPeople||[]).filter(n=>n!==name);
+    el.value = "";
+    save(); renderWeekTeamList();
+  });
+  document.getElementById("weekTeamBtn").addEventListener("click", ()=>{
+    renderWeekTeamList();
+    weekTeamOverlay.classList.add("open");
+  });
+
+  // ---------- Grid settings modal ----------
+  const gridOverlay = document.getElementById("gridOverlay");
+  document.getElementById("gridBtn").addEventListener("click", ()=>{
+    const week = activeWeek();
+    document.getElementById("gridStart").value = week.grid.start;
+    document.getElementById("gridEnd").value = week.grid.end;
+    document.getElementById("gridStep").value = String(week.grid.step);
+    gridOverlay.classList.add("open");
+  });
+  document.getElementById("saveGridBtn").addEventListener("click", ()=>{
+    const week = activeWeek();
+    const start = document.getElementById("gridStart").value || DEFAULT_GRID.start;
+    const end = document.getElementById("gridEnd").value || DEFAULT_GRID.end;
+    const step = Number(document.getElementById("gridStep").value);
+    if(toMin(end) <= toMin(start)){ alert("L'heure de fin doit être après l'heure de début."); return; }
+    week.grid = {start, end, step};
+    save();
+    closeOverlay("gridOverlay");
+    renderAll();
+  });
+
+  // ---------- Toolbar ----------
+  weekTitleInput.addEventListener("input", ()=>{
+    activeWeek().title = weekTitleInput.value;
+    save(); renderWeekSelect();
+  });
+  weekSelect.addEventListener("change", ()=>{
+    state.activeWeekId = weekSelect.value;
+    save(); renderAll();
+  });
+  document.getElementById("newWeekBtn").addEventListener("click", ()=>{
+    const w = blankWeek();
+    state.weeks.push(w);
+    state.activeWeekId = w.id;
+    save(); renderAll();
+  });
+  document.getElementById("dupWeekBtn").addEventListener("click", ()=>{
+    const src = activeWeek();
+    if(!src) return;
+    const copy = JSON.parse(JSON.stringify(src));
+    copy.id = uid();
+    copy.title = (src.title || "Semaine") + " (copie)";
+    copy.days.forEach(d=>{ d.id = uid(); d.blocks.forEach(b=> b.id = uid()); });
+    state.weeks.push(copy);
+    state.activeWeekId = copy.id;
+    save(); renderAll();
+  });
+  document.getElementById("deleteWeekBtn").addEventListener("click", ()=>{
+    if(state.weeks.length<=1){ alert("Impossible de supprimer la dernière semaine."); return; }
+    if(!confirm("Supprimer définitivement cette semaine ?")) return;
+    state.weeks = state.weeks.filter(w=>w.id!==state.activeWeekId);
+    state.activeWeekId = state.weeks[0].id;
+    save(); renderAll();
+  });
+  document.getElementById("printBtn").addEventListener("click", ()=> window.print());
+
+  function csvEscape(v){
+    v = String(v==null ? "" : v);
+    if(/[",\n\r]/.test(v)) return '"'+v.replace(/"/g,'""')+'"';
+    return v;
+  }
+  function exportCsv(){
+    const week = activeWeek();
+    if(!week) return;
+    const rows = [["Jour","Date","Coef","Horaire marée","Colonne","Type","Début","Fin","Équipe","Détails"]];
+    week.days.forEach(day=>{
+      if(!day.blocks.length){
+        rows.push([day.label, day.date, day.coef, day.horaire, "", "", "", "", "", ""]);
+      } else {
+        day.blocks.slice().sort((a,b)=> toMin(a.start)-toMin(b.start) || (a.lane||0)-(b.lane||0)).forEach(b=>{
+          const t = typeById(b.typeId);
+          rows.push([day.label, day.date, day.coef, day.horaire, String((b.lane||0)+1), t.name, fmtFR(b.start), fmtFR(b.end), (b.people||[]).join(", "), b.note||""]);
+        });
+      }
+    });
+    const csv = rows.map(r=> r.map(csvEscape).join(",")).join("\r\n");
+    const blob = new Blob(["\uFEFF"+csv], {type:"text/csv;charset=utf-8;"});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = (week.title || "planning").replace(/[\\/:*?"<>|]/g,"").trim() + ".csv";
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+  }
+  document.getElementById("exportCsvBtn").addEventListener("click", exportCsv);
+  document.getElementById("manageTypesBtn").addEventListener("click", ()=>{ renderTypesList(); typesOverlay.classList.add("open"); });
+
+  function closeOverlay(id){ document.getElementById(id).classList.remove("open"); }
+  document.querySelectorAll("[data-close]").forEach(el=>{
+    el.addEventListener("click", ()=> closeOverlay(el.dataset.close));
+  });
+  document.querySelectorAll(".overlay").forEach(ov=>{
+    ov.addEventListener("click", e=>{ if(e.target===ov) closeOverlay(ov.id); });
+  });
+
+  // ---------- Auth (Firebase) — accès libre, sans compte : connexion anonyme automatique ----------
+  if(auth){
+    onAuthStateChanged(auth, user=>{
+      if(user){
+        firebaseReady = true;
+        attachPlanningSync();
+      } else {
+        firebaseReady = false;
+        signInAnonymously(auth).catch(err=> console.error("Connexion anonyme impossible:", err));
+      }
+    });
+  }
+  // Sans config Firebase renseignée, l'app fonctionne comme avant (localStorage uniquement)
+
+  renderAll();
+})();
+</script>
+</body>
+</html>
