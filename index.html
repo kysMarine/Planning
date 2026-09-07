@@ -215,6 +215,24 @@
   .archive-row-meta{font-size:12px; color:var(--ink-soft);}
   .archive-row-actions{display:flex; gap:6px; flex:0 0 auto;}
 
+  .preview-day{margin-bottom:16px;}
+  .preview-day-head{
+    display:flex; align-items:baseline; gap:8px; flex-wrap:wrap;
+    border-bottom:2px solid var(--navy); padding-bottom:4px; margin-bottom:6px;
+  }
+  .preview-day-head .pd-label{font-weight:700; color:var(--navy-deep); font-size:15px;}
+  .preview-day-head .pd-meta{font-size:11.5px; color:var(--ink-soft);}
+  .preview-block{
+    display:flex; gap:8px; padding:5px 0; border-bottom:1px dotted var(--paper-line);
+    font-size:12.5px; align-items:baseline;
+  }
+  .preview-block .pb-dot{width:9px; height:9px; border-radius:2px; flex:0 0 auto; margin-top:3px;}
+  .preview-block .pb-time{color:var(--ink-soft); flex:0 0 auto; white-space:nowrap; font-size:11.5px;}
+  .preview-block .pb-type{font-weight:700; color:var(--navy-deep); flex:0 0 auto;}
+  .preview-block .pb-people{color:var(--names-red); font-weight:600;}
+  .preview-block .pb-note{color:var(--ink-soft);}
+  .preview-empty{font-size:12px; color:var(--ink-soft); font-style:italic;}
+
   /* ---------- Modal ---------- */
   .overlay{
     position:fixed; inset:0; background:rgba(20,28,31,.55); z-index:100;
@@ -444,6 +462,20 @@
     </div>
     <div class="modal-actions">
       <button class="btn primary" data-close="weekTeamOverlay">Fermer</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: read-only preview of an archived week -->
+<div class="overlay" id="archivePreviewOverlay">
+  <div class="modal" style="max-width:600px;">
+    <button class="close-x" data-close="archivePreviewOverlay">✕</button>
+    <h2 id="archivePreviewTitle">Semaine</h2>
+    <p class="modal-sub" id="archivePreviewSub"></p>
+    <div id="archivePreviewContent"></div>
+    <div class="modal-actions">
+      <button class="btn" data-close="archivePreviewOverlay">Fermer</button>
+      <button class="btn primary" id="archivePreviewOpenBtn">Ouvrir cette semaine</button>
     </div>
   </div>
 </div>
@@ -1346,6 +1378,7 @@ try{
           <span class="archive-row-meta">${meta}</span>
         </div>
         <div class="archive-row-actions">
+          <button class="btn" data-action="preview-week" data-week="${w.id}">Consulter</button>
           <button class="btn" data-action="open-week" data-week="${w.id}" ${isActive?"disabled":""}>${isActive?"Ouverte":"Ouvrir"}</button>
         </div>
       </div>`;
@@ -1353,13 +1386,65 @@ try{
   }
   archiveSearchEl.addEventListener("input", renderArchivesList);
   archiveSortEl.addEventListener("change", renderArchivesList);
-  archivesListEl.addEventListener("click", e=>{
-    const btn = e.target.closest("[data-action='open-week']");
-    if(!btn) return;
-    state.activeWeekId = btn.dataset.week;
+  function openWeekById(weekId){
+    state.activeWeekId = weekId;
     save();
     switchMainTab("planning");
     renderAll();
+  }
+
+  const archivePreviewOverlay = document.getElementById("archivePreviewOverlay");
+  const archivePreviewContent = document.getElementById("archivePreviewContent");
+  let previewedWeekId = null;
+
+  function openArchivePreview(week){
+    previewedWeekId = week.id;
+    document.getElementById("archivePreviewTitle").textContent = week.title || "Sans titre";
+    const dateRange = weekDateRange(week);
+    document.getElementById("archivePreviewSub").textContent =
+      (dateRange ? dateRange+" · " : "") + "Créée le "+formatCreatedAt(week.createdAt);
+
+    archivePreviewContent.innerHTML = week.days.map(day=>{
+      const blocksSorted = day.blocks.slice().sort((a,b)=> (a.lane||0)-(b.lane||0) || toMin(a.start)-toMin(b.start));
+      const blocksHtml = blocksSorted.length ? blocksSorted.map(b=>{
+        const t = typeById(b.typeId);
+        return `<div class="preview-block">
+          <span class="pb-dot" style="background:${t.color}"></span>
+          <span class="pb-time">${fmtFR(b.start)}-${fmtFR(b.end)}</span>
+          <span class="pb-type">${escapeHtml(t.name)}</span>
+          ${b.people && b.people.length ? `<span class="pb-people">${b.people.map(escapeHtml).join(", ")}</span>` : ""}
+          ${b.note ? `<span class="pb-note">${escapeHtml(b.note)}</span>` : ""}
+        </div>`;
+      }).join("") : `<p class="preview-empty">Aucun module.</p>`;
+
+      const metaBits = [day.date, day.coef, day.horaire].filter(Boolean).join(" · ");
+      return `<div class="preview-day">
+        <div class="preview-day-head">
+          <span class="pd-label">${escapeHtml(day.label)}</span>
+          ${metaBits ? `<span class="pd-meta">${escapeHtml(metaBits)}</span>` : ""}
+        </div>
+        ${blocksHtml}
+      </div>`;
+    }).join("");
+
+    archivePreviewOverlay.classList.add("open");
+  }
+
+  document.getElementById("archivePreviewOpenBtn").addEventListener("click", ()=>{
+    if(!previewedWeekId) return;
+    closeOverlay("archivePreviewOverlay");
+    openWeekById(previewedWeekId);
+  });
+
+  archivesListEl.addEventListener("click", e=>{
+    const previewBtn = e.target.closest("[data-action='preview-week']");
+    if(previewBtn){
+      const week = state.weeks.find(w=>w.id===previewBtn.dataset.week);
+      if(week) openArchivePreview(week);
+      return;
+    }
+    const openBtn = e.target.closest("[data-action='open-week']");
+    if(openBtn) openWeekById(openBtn.dataset.week);
   });
 
   // ---------- Équipe de la semaine modal ----------
