@@ -167,6 +167,8 @@
   .block-type{font-weight:700; font-size:11.5px; color:var(--navy-deep);}
   .block-time{font-size:10px; color:var(--ink-soft); white-space:nowrap;}
   .block-people{font-size:10.8px; color:var(--names-red); margin-top:2px; font-weight:700; overflow:hidden; text-overflow:ellipsis;}
+  .block-people .name-blue, .pb-people .name-blue{color:var(--recap-blue);}
+  .block-people .name-red, .pb-people .name-red{color:var(--names-red);}
   .block-note{font-size:10.8px; color:var(--ink); margin-top:2px; line-height:1.3; white-space:pre-wrap; overflow:hidden;}
   .block-edit-row{display:flex; gap:4px; margin-top:3px; opacity:0; transition:opacity .12s; position:absolute; top:3px; right:5px; z-index:4;}
   .block-card:hover .block-edit-row{opacity:1;}
@@ -882,6 +884,12 @@ try{
     const p = state.people.find(p=>p.name===rawName);
     return p ? personDisplay(p) : rawName;
   }
+  function personNameSpan(rawName){
+    const p = state.people.find(p=>p.name===rawName);
+    const disp = p ? personDisplay(p) : rawName;
+    const cls = (p && p.highlight) ? ' class="name-red"' : (p && p.highlightBlue) ? ' class="name-blue"' : '';
+    return `<span${cls}>${escapeHtml(disp)}</span>`;
+  }
 
   // ---------- Main tabs: Planning / Équipe ----------
   const planningPage = document.getElementById("planningPage");
@@ -964,7 +972,7 @@ try{
               <span class="block-type">${escapeHtml(t.name)}</span>
               <span class="block-time">${fmtFR(b.start)}-${fmtFR(b.end)}</span>
             </div>
-            ${b.people && b.people.length ? `<div class="block-people">${b.people.map(n=>escapeHtml(displayForRawName(n))).join(", ")}</div>` : ""}
+            ${b.people && b.people.length ? `<div class="block-people">${b.people.map(personNameSpan).join(", ")}</div>` : ""}
             ${b.note ? `<div class="block-note">${escapeHtml(b.note)}</div>` : ""}
           </div>
         </div>`;
@@ -1552,7 +1560,7 @@ try{
           <span class="pb-dot" style="background:${t.color}"></span>
           <span class="pb-time">${fmtFR(b.start)}-${fmtFR(b.end)}</span>
           <span class="pb-type">${escapeHtml(t.name)}</span>
-          ${b.people && b.people.length ? `<span class="pb-people">${b.people.map(n=>escapeHtml(displayForRawName(n))).join(", ")}</span>` : ""}
+          ${b.people && b.people.length ? `<span class="pb-people">${b.people.map(personNameSpan).join(", ")}</span>` : ""}
           ${b.note ? `<span class="pb-note">${escapeHtml(b.note)}</span>` : ""}
         </div>`;
       }).join("") : `<p class="preview-empty">Aucun module.</p>`;
