@@ -18,6 +18,7 @@
     --neutre-strip:#C9C2AC;
     --danger:#B4483F;
     --names-red:#D8232A;
+    --recap-blue:#4FA3D1;
     --radius:5px;
   }
   *{box-sizing:border-box;}
@@ -119,6 +120,7 @@
   .day-recap-line{font-size:11px; color:var(--ink); line-height:1.5;}
   .day-recap-line b{color:var(--ink-soft); font-weight:700;}
   .recap-highlight{color:var(--names-red); font-weight:700;}
+  .recap-highlight-blue{color:var(--recap-blue); font-weight:700;}
   .day-col-actions{
     display:flex; justify-content:space-between; align-items:center; padding:7px 10px;
     border-bottom:1px solid var(--paper-line);
@@ -303,6 +305,8 @@
   .manage-row .icon-btn{color:var(--ink-soft); font-size:14px;}
   .highlight-toggle-btn{color:var(--paper-line) !important;}
   .highlight-toggle-btn.active{color:var(--names-red) !important;}
+  .highlight-toggle-blue-btn{color:var(--paper-line) !important;}
+  .highlight-toggle-blue-btn.active{color:var(--recap-blue) !important;}
   .manage-row span.pname{flex:1; font-size:14px;}
   .add-inline{display:flex; gap:6px; margin-top:12px;}
   .add-inline input{flex:1;}
@@ -730,7 +734,7 @@ try{
     const perms=[], interims=[];
     names.forEach(n=>{
       const p = state.people.find(p=>p.name===n);
-      const entry = {name:n, display: p ? personDisplay(p) : n, highlight: !!(p && p.highlight)};
+      const entry = {name:n, display: p ? personDisplay(p) : n, highlight: !!(p && p.highlight), highlightBlue: !!(p && p.highlightBlue)};
       if(p && p.type==='interimaire') interims.push(entry); else perms.push(entry);
     });
     perms.sort((a,b)=> a.display.localeCompare(b.display));
@@ -867,7 +871,12 @@ try{
   // Le "nom" d'une personne (ex: "Intérimaire 1") sert d'identifiant stable dans les modules.
   // Si un "prénom réel" est renseigné, c'est lui qu'on affiche partout à la place.
   function personDisplay(p){
-    return (p && p.displayName && p.displayName.trim()) ? p.displayName.trim() : (p ? p.name : "");
+    if(!p) return "";
+    if(p.displayName && p.displayName.trim()){
+      const dn = p.displayName.trim();
+      return p.type==='interimaire' ? "Int."+dn : dn;
+    }
+    return p.name;
   }
   function displayForRawName(rawName){
     const p = state.people.find(p=>p.name===rawName);
@@ -968,8 +977,8 @@ try{
       const recap = dayTeamRecap(day);
       const recapHtml = (recap.perms.length || recap.interims.length) ? `
         <div class="day-recap">
-          ${recap.perms.length ? `<div class="day-recap-line"><b>Personnel :</b> ${recap.perms.map(p=> p.highlight ? `<span class="recap-highlight">${escapeHtml(p.display)}</span>` : escapeHtml(p.display)).join(", ")}</div>` : ""}
-          ${recap.interims.length ? `<div class="day-recap-line"><b>Intérimaires :</b> ${recap.interims.map(p=> p.highlight ? `<span class="recap-highlight">${escapeHtml(p.display)}</span>` : escapeHtml(p.display)).join(", ")}</div>` : ""}
+          ${recap.perms.length ? `<div class="day-recap-line"><b>Personnel :</b> ${recap.perms.map(p=> p.highlight ? `<span class="recap-highlight">${escapeHtml(p.display)}</span>` : p.highlightBlue ? `<span class="recap-highlight-blue">${escapeHtml(p.display)}</span>` : escapeHtml(p.display)).join(", ")}</div>` : ""}
+          ${recap.interims.length ? `<div class="day-recap-line"><b>Intérimaires :</b> ${recap.interims.map(p=> p.highlight ? `<span class="recap-highlight">${escapeHtml(p.display)}</span>` : p.highlightBlue ? `<span class="recap-highlight-blue">${escapeHtml(p.display)}</span>` : escapeHtml(p.display)).join(", ")}</div>` : ""}
         </div>` : "";
 
       return `
@@ -1412,9 +1421,10 @@ try{
       <div class="manage-row" data-id="${p.id}">
         <div class="manage-row-fields">
           <input type="text" value="${escapeHtml(p.name)}" data-role="name" placeholder="Nom du créneau">
-          <input type="text" value="${escapeHtml(p.displayName||'')}" data-role="displayName" placeholder="Prénom réel (optionnel)">
+          ${peopleTab==='interimaire' ? `<input type="text" value="${escapeHtml(p.displayName||'')}" data-role="displayName" placeholder="Prénom réel (optionnel)">` : ""}
         </div>
         <button class="icon-btn highlight-toggle-btn ${p.highlight?'active':''}" data-role="toggle-highlight" title="Faire apparaître en rouge dans le récap">●</button>
+        ${peopleTab==='interimaire' ? `<button class="icon-btn highlight-toggle-blue-btn ${p.highlightBlue?'active':''}" data-role="toggle-highlight-blue" title="Faire apparaître en bleu clair dans le récap">●</button>` : ""}
         <button class="icon-btn" data-role="swap-type" title="Changer de catégorie">⇄</button>
         <button class="icon-btn" data-role="delete-person" title="Supprimer">✕</button>
       </div>`).join("") || `<p style="font-size:13px; color:var(--ink-soft);">Aucun prénom dans cette catégorie.</p>`;
@@ -1466,6 +1476,9 @@ try{
       save(); renderPeopleListPage();
     } else if(e.target.dataset.role==="toggle-highlight"){
       p.highlight = !p.highlight;
+      save(); renderPeopleListPage(); renderBoard();
+    } else if(e.target.dataset.role==="toggle-highlight-blue"){
+      p.highlightBlue = !p.highlightBlue;
       save(); renderPeopleListPage(); renderBoard();
     }
   });
