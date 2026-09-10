@@ -342,6 +342,7 @@
   <div class="toolbar-actions" id="toolbarActions">
     <select class="btn" id="weekSelect" title="Charger une semaine enregistrée"></select>
     <button class="btn" id="newWeekBtn">+ Semaine vierge</button>
+    <button class="btn" id="genNextWeekBtn" title="Crée la semaine suivant celle actuellement ouverte, avec dates, coef et horaires de marée basse déjà remplis">🌊 Semaine suivante</button>
     <button class="btn" id="dupWeekBtn">Dupliquer</button>
     <button class="btn" id="gridBtn">Grille horaire</button>
     <button class="btn" id="manageTypesBtn">Modules</button>
@@ -559,6 +560,107 @@ try{
 
   const DEFAULT_PEOPLE_NAMES = ["Nico","Marc","Matthias","Julian","Kelig","Carad","Louis","Guillaume","Ryan","Swann","Florian","Tudy","PG","Télio","Lucie","Martin"];
   const DEFAULT_GRID = {start:"04:00", end:"20:30", step:30};
+
+  // Marée basse en journée (6h-18h) et coefficient à Port-Navalo, source SHOM (marine.meteoconsult.fr).
+  // Les entrées marquées d'un "*" sont approximatives (horaire hors 6h-18h ou coefficient non
+  // explicitement indiqué ce jour-là dans la table source) — à vérifier sur maree.info si besoin.
+  const TIDE_DATA = {
+    "10/09":{coef:"90",horaire:"11h10"}, "11/09":{coef:"98",horaire:"11h53"}, "12/09":{coef:"101",horaire:"12h34"},
+    "13/09":{coef:"97",horaire:"13h13"}, "14/09":{coef:"89",horaire:"13h51"}, "15/09":{coef:"77",horaire:"14h28"},
+    "16/09":{coef:"63",horaire:"15h06"}, "17/09":{coef:"49",horaire:"15h46"}, "18/09":{coef:"35",horaire:"16h34"},
+    "19/09":{coef:"28*",horaire:"17h39"}, "20/09":{coef:"24",horaire:"06h16"}, "21/09":{coef:"24",horaire:"07h53"},
+    "22/09":{coef:"35",horaire:"09h07"}, "23/09":{coef:"50",horaire:"09h53"}, "24/09":{coef:"64",horaire:"10h30"},
+    "25/09":{coef:"77",horaire:"11h05"}, "26/09":{coef:"87",horaire:"11h39"}, "27/09":{coef:"95",horaire:"12h14"},
+    "28/09":{coef:"99",horaire:"12h49"}, "29/09":{coef:"96",horaire:"13h27"}, "30/09":{coef:"88",horaire:"14h08"},
+    "01/10":{coef:"75",horaire:"14h53"}, "02/10":{coef:"60",horaire:"15h44"}, "03/10":{coef:"46",horaire:"16h47"},
+    "04/10":{coef:"41*",horaire:"18h06"}, "05/10":{coef:"40",horaire:"06h36"}, "06/10":{coef:"48",horaire:"08h03"},
+    "07/10":{coef:"62",horaire:"09h11"}, "08/10":{coef:"77",horaire:"10h04"}, "09/10":{coef:"87",horaire:"10h50"},
+    "10/10":{coef:"94",horaire:"11h32"}, "11/10":{coef:"95",horaire:"12h11"}, "12/10":{coef:"91",horaire:"12h48"},
+    "13/10":{coef:"83",horaire:"13h24"}, "14/10":{coef:"74",horaire:"14h00"}, "15/10":{coef:"62",horaire:"14h35"},
+    "16/10":{coef:"50",horaire:"15h14"}, "17/10":{coef:"37",horaire:"15h59"}, "18/10":{coef:"28",horaire:"16h58"},
+    "19/10":{coef:"25*",horaire:"05h31"}, "20/10":{coef:"26",horaire:"06h59"}, "21/10":{coef:"34",horaire:"08h14"},
+    "22/10":{coef:"48",horaire:"09h07"}, "23/10":{coef:"62",horaire:"09h49"}, "24/10":{coef:"76",horaire:"10h28"},
+    "25/10":{coef:"87",horaire:"10h06"}, "26/10":{coef:"95",horaire:"10h44"}, "27/10":{coef:"99",horaire:"11h25"},
+    "28/10":{coef:"99",horaire:"12h08"}, "29/10":{coef:"88",horaire:"12h53"}, "30/10":{coef:"76",horaire:"13h43"},
+    "31/10":{coef:"62",horaire:"14h38"},
+    "01/11":{coef:"51",horaire:"15h42"}, "02/11":{coef:"47*",horaire:"16h57"}, "03/11":{coef:"48*",horaire:"18h17"},
+    "04/11":{coef:"52",horaire:"06h40"}, "05/11":{coef:"61",horaire:"07h45"}, "06/11":{coef:"71",horaire:"08h39"},
+    "07/11":{coef:"78",horaire:"09h27"}, "08/11":{coef:"83",horaire:"10h09"}, "09/11":{coef:"84",horaire:"10h49"},
+    "10/11":{coef:"83",horaire:"11h26"}, "11/11":{coef:"80",horaire:"12h02"}, "12/11":{coef:"71",horaire:"12h38"},
+    "13/11":{coef:"63",horaire:"13h14"}, "14/11":{coef:"54",horaire:"13h52"}, "15/11":{coef:"45",horaire:"14h35"},
+    "16/11":{coef:"38",horaire:"15h25"}, "17/11":{coef:"34",horaire:"16h25"}, "18/11":{coef:"35*",horaire:"17h36"},
+    "19/11":{coef:"37",horaire:"06h09"}, "20/11":{coef:"46",horaire:"07h10"}, "21/11":{coef:"57",horaire:"08h01"},
+    "22/11":{coef:"70",horaire:"08h48"}, "23/11":{coef:"81",horaire:"09h33"}, "24/11":{coef:"90",horaire:"10h19"},
+    "25/11":{coef:"96",horaire:"11h06"}, "26/11":{coef:"97",horaire:"11h54"}, "27/11":{coef:"90",horaire:"12h44"},
+    "28/11":{coef:"82",horaire:"13h35"}, "29/11":{coef:"71",horaire:"14h30"}, "30/11":{coef:"62",horaire:"15h29"},
+    "01/12":{coef:"55",horaire:"16h34"}, "02/12":{coef:"53*",horaire:"17h42"}, "03/12":{coef:"52",horaire:"06h05"},
+    "04/12":{coef:"54",horaire:"07h10"}, "05/12":{coef:"59",horaire:"08h10"}, "06/12":{coef:"64",horaire:"09h03"},
+    "07/12":{coef:"69",horaire:"09h49"}, "08/12":{coef:"72",horaire:"10h31"}, "09/12":{coef:"74",horaire:"11h09"},
+    "10/12":{coef:"74",horaire:"11h46"}, "11/12":{coef:"72",horaire:"12h22"}, "12/12":{coef:"67",horaire:"12h58"},
+    "13/12":{coef:"63",horaire:"13h35"}, "14/12":{coef:"57",horaire:"14h13"}, "15/12":{coef:"52",horaire:"14h54"},
+    "16/12":{coef:"47",horaire:"15h41"}, "17/12":{coef:"44",horaire:"16h34"}, "18/12":{coef:"44*",horaire:"17h36"},
+    "19/12":{coef:"45",horaire:"06h06"}, "20/12":{coef:"51",horaire:"07h10"}, "21/12":{coef:"61",horaire:"08h10"},
+    "22/12":{coef:"72",horaire:"09h07"}, "23/12":{coef:"83",horaire:"10h01"}, "24/12":{coef:"91",horaire:"10h53"},
+    "25/12":{coef:"97",horaire:"11h44"}, "26/12":{coef:"98",horaire:"12h34"}, "27/12":{coef:"93",horaire:"13h24"},
+    "28/12":{coef:"84",horaire:"14h15"}, "29/12":{coef:"73",horaire:"15h07"}, "30/12":{coef:"61",horaire:"16h01"},
+    "31/12":{coef:"51",horaire:"17h00"}
+  };
+
+  const SEASON_DAY_LABELS = ["Lundi","Mardi","Mercredi","Jeudi","Vendredi","Samedi"];
+
+  function fmtDDMM(d){ return String(d.getDate()).padStart(2,'0')+"/"+String(d.getMonth()+1).padStart(2,'0'); }
+
+  // Déduit une date (avec année) à partir d'un champ "date" du planning (format "DD/MM", sans année),
+  // en choisissant l'année la plus plausible par rapport à aujourd'hui.
+  function guessDateWithYear(ddmm){
+    const [dd,mm] = ddmm.split('/').map(Number);
+    if(!dd || !mm) return null;
+    const now = new Date();
+    let year = now.getFullYear();
+    let d = new Date(year, mm-1, dd);
+    // Si la date tombe très loin dans le passé (>200 jours), elle appartient probablement à l'année prochaine.
+    if((now - d) / 86400000 > 200) d = new Date(year+1, mm-1, dd);
+    return d;
+  }
+
+  function generateNextWeek(){
+    const week = activeWeek();
+    if(!week) return null;
+
+    // Cherche le dernier jour de la semaine active qui a une date renseignée.
+    let lastDate = null;
+    for(let i=week.days.length-1; i>=0; i--){
+      if(week.days[i].date){ lastDate = guessDateWithYear(week.days[i].date); break; }
+    }
+    // Repli : si aucune date n'est renseignée, part d'aujourd'hui.
+    const base = lastDate || new Date();
+
+    // Trouve le prochain lundi après cette date.
+    let nextMonday = new Date(base); nextMonday.setDate(nextMonday.getDate()+1);
+    while(nextMonday.getDay() !== 1) nextMonday.setDate(nextMonday.getDate()+1);
+
+    // Déduit le titre "Semaine N+1" si le titre actuel se termine par un nombre.
+    const m = (week.title||"").match(/(\d+)\s*$/);
+    const nextTitle = m ? week.title.replace(/(\d+)\s*$/, (String(Number(m[1])+1))) : "Nouvelle semaine";
+
+    const days = [];
+    for(let i=0;i<6;i++){
+      const d = new Date(nextMonday); d.setDate(d.getDate()+i);
+      const key = fmtDDMM(d);
+      const tide = TIDE_DATA[key];
+      days.push({
+        id:uid(), label:SEASON_DAY_LABELS[i], date:key,
+        coef: tide ? "coef "+tide.coef : "",
+        horaire: tide ? tide.horaire : "",
+        lanes:1, blocks:[]
+      });
+    }
+    const newWeek = {id:uid(), title:nextTitle, grid:{...week.grid}, excludedPeople:[], createdAt:Date.now(), days};
+    state.weeks.push(newWeek);
+    state.activeWeekId = newWeek.id;
+    save();
+    return newWeek;
+  }
 
   function strip(hex){
     hex = hex.replace('#','');
@@ -1534,6 +1636,12 @@ try{
     state.weeks.push(w);
     state.activeWeekId = w.id;
     save(); renderAll();
+  });
+  document.getElementById("genNextWeekBtn").addEventListener("click", ()=>{
+    const w = generateNextWeek();
+    if(!w) return;
+    renderAll();
+    showSaveToast(w.title+" créée ✓");
   });
   document.getElementById("dupWeekBtn").addEventListener("click", ()=>{
     const src = activeWeek();
