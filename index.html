@@ -296,6 +296,8 @@
     border-bottom:1px solid var(--paper-line);
   }
   .manage-row input[type=text]{flex:1; border:none; background:transparent; font-size:14px; padding:3px 0;}
+  .manage-row-fields{display:flex; flex-direction:column; flex:1; min-width:0;}
+  .manage-row-fields input[data-role="displayName"]{font-size:12px; color:var(--names-red); padding-top:0;}
   .manage-row input[type=color]{width:26px; height:26px; border:none; padding:0; background:none; cursor:pointer;}
   .manage-row input[type=checkbox]{width:16px; height:16px; cursor:pointer;}
   .manage-row .icon-btn{color:var(--ink-soft); font-size:14px;}
@@ -728,11 +730,11 @@ try{
     const perms=[], interims=[];
     names.forEach(n=>{
       const p = state.people.find(p=>p.name===n);
-      const entry = {name:n, highlight: !!(p && p.highlight)};
+      const entry = {name:n, display: p ? personDisplay(p) : n, highlight: !!(p && p.highlight)};
       if(p && p.type==='interimaire') interims.push(entry); else perms.push(entry);
     });
-    perms.sort((a,b)=> a.name.localeCompare(b.name));
-    interims.sort((a,b)=> a.name.localeCompare(b.name));
+    perms.sort((a,b)=> a.display.localeCompare(b.display));
+    interims.sort((a,b)=> a.display.localeCompare(b.display));
     return {perms, interims};
   }
 
@@ -862,6 +864,16 @@ try{
     return (s||"").replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
   }
 
+  // Le "nom" d'une personne (ex: "Intérimaire 1") sert d'identifiant stable dans les modules.
+  // Si un "prénom réel" est renseigné, c'est lui qu'on affiche partout à la place.
+  function personDisplay(p){
+    return (p && p.displayName && p.displayName.trim()) ? p.displayName.trim() : (p ? p.name : "");
+  }
+  function displayForRawName(rawName){
+    const p = state.people.find(p=>p.name===rawName);
+    return p ? personDisplay(p) : rawName;
+  }
+
   // ---------- Main tabs: Planning / Équipe ----------
   const planningPage = document.getElementById("planningPage");
   const teamPage = document.getElementById("teamPage");
@@ -943,7 +955,7 @@ try{
               <span class="block-type">${escapeHtml(t.name)}</span>
               <span class="block-time">${fmtFR(b.start)}-${fmtFR(b.end)}</span>
             </div>
-            ${b.people && b.people.length ? `<div class="block-people">${b.people.map(escapeHtml).join(", ")}</div>` : ""}
+            ${b.people && b.people.length ? `<div class="block-people">${b.people.map(n=>escapeHtml(displayForRawName(n))).join(", ")}</div>` : ""}
             ${b.note ? `<div class="block-note">${escapeHtml(b.note)}</div>` : ""}
           </div>
         </div>`;
@@ -956,8 +968,8 @@ try{
       const recap = dayTeamRecap(day);
       const recapHtml = (recap.perms.length || recap.interims.length) ? `
         <div class="day-recap">
-          ${recap.perms.length ? `<div class="day-recap-line"><b>Personnel :</b> ${recap.perms.map(p=> p.highlight ? `<span class="recap-highlight">${escapeHtml(p.name)}</span>` : escapeHtml(p.name)).join(", ")}</div>` : ""}
-          ${recap.interims.length ? `<div class="day-recap-line"><b>Intérimaires :</b> ${recap.interims.map(p=> p.highlight ? `<span class="recap-highlight">${escapeHtml(p.name)}</span>` : escapeHtml(p.name)).join(", ")}</div>` : ""}
+          ${recap.perms.length ? `<div class="day-recap-line"><b>Personnel :</b> ${recap.perms.map(p=> p.highlight ? `<span class="recap-highlight">${escapeHtml(p.display)}</span>` : escapeHtml(p.display)).join(", ")}</div>` : ""}
+          ${recap.interims.length ? `<div class="day-recap-line"><b>Intérimaires :</b> ${recap.interims.map(p=> p.highlight ? `<span class="recap-highlight">${escapeHtml(p.display)}</span>` : escapeHtml(p.display)).join(", ")}</div>` : ""}
         </div>` : "";
 
       return `
@@ -1302,7 +1314,7 @@ try{
 
   function chipsGroupHtml(list){
     return list.map(p=>
-      `<div class="chip ${editingCtx.selectedPeople.has(p.name)?'selected':''}" data-name="${escapeHtml(p.name)}">${escapeHtml(p.name)}</div>`
+      `<div class="chip ${editingCtx.selectedPeople.has(p.name)?'selected':''}" data-name="${escapeHtml(p.name)}">${escapeHtml(personDisplay(p))}</div>`
     ).join("");
   }
   function renderPeopleChips(week){
@@ -1398,7 +1410,10 @@ try{
     const list = state.people.filter(p=>p.type===peopleTab);
     peopleListPageEl.innerHTML = list.map(p=>`
       <div class="manage-row" data-id="${p.id}">
-        <input type="text" value="${escapeHtml(p.name)}" data-role="name">
+        <div class="manage-row-fields">
+          <input type="text" value="${escapeHtml(p.name)}" data-role="name" placeholder="Nom du créneau">
+          <input type="text" value="${escapeHtml(p.displayName||'')}" data-role="displayName" placeholder="Prénom réel (optionnel)">
+        </div>
         <button class="icon-btn highlight-toggle-btn ${p.highlight?'active':''}" data-role="toggle-highlight" title="Faire apparaître en rouge dans le récap">●</button>
         <button class="icon-btn" data-role="swap-type" title="Changer de catégorie">⇄</button>
         <button class="icon-btn" data-role="delete-person" title="Supprimer">✕</button>
@@ -1417,10 +1432,17 @@ try{
     renderPeopleListPage();
   });
   peopleListPageEl.addEventListener("input", e=>{
-    if(e.target.dataset.role!=="name") return;
+    const role = e.target.dataset.role;
+    if(role!=="name" && role!=="displayName") return;
     const row = e.target.closest(".manage-row");
     const p = state.people.find(p=>p.id===row.dataset.id);
     if(!p) return;
+    if(role==="displayName"){
+      p.displayName = e.target.value;
+      save();
+      renderBoard();
+      return;
+    }
     const oldName = p.name, newName = e.target.value;
     p.name = newName;
     if(oldName !== newName){
@@ -1517,7 +1539,7 @@ try{
           <span class="pb-dot" style="background:${t.color}"></span>
           <span class="pb-time">${fmtFR(b.start)}-${fmtFR(b.end)}</span>
           <span class="pb-type">${escapeHtml(t.name)}</span>
-          ${b.people && b.people.length ? `<span class="pb-people">${b.people.map(escapeHtml).join(", ")}</span>` : ""}
+          ${b.people && b.people.length ? `<span class="pb-people">${b.people.map(n=>escapeHtml(displayForRawName(n))).join(", ")}</span>` : ""}
           ${b.note ? `<span class="pb-note">${escapeHtml(b.note)}</span>` : ""}
         </div>`;
       }).join("") : `<p class="preview-empty">Aucun module.</p>`;
@@ -1559,7 +1581,7 @@ try{
     return list.map(p=>`
       <div class="manage-row" data-name="${escapeHtml(p.name)}">
         <input type="checkbox" ${excluded.includes(p.name)?"":"checked"} data-role="toggle-active">
-        <span class="pname">${escapeHtml(p.name)}</span>
+        <span class="pname">${escapeHtml(personDisplay(p))}</span>
       </div>`).join("");
   }
   function renderWeekTeamList(){
