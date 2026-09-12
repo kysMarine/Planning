@@ -121,6 +121,20 @@
   .day-recap-line b{color:var(--ink-soft); font-weight:700;}
   .recap-highlight{color:var(--names-red); font-weight:700;}
   .recap-highlight-blue{color:var(--recap-blue); font-weight:700;}
+
+  .day-comment-box{margin:0 10px 12px; padding:8px 9px; background:var(--card); border:1px solid var(--paper-line); border-radius:4px;}
+  .day-comment-toolbar{display:flex; align-items:center; gap:5px; margin-bottom:5px;}
+  .dc-label{font-size:11px; font-weight:700; color:var(--ink-soft); margin-right:auto;}
+  .dc-size-select{font-size:10.5px; padding:2px 3px; border:1px solid var(--paper-line); border-radius:3px; background:#fff; color:var(--ink-soft);}
+  .dc-btn{border:1px solid var(--paper-line); background:#fff; width:21px; height:21px; border-radius:3px; cursor:pointer; font-size:10px; color:var(--ink-soft); line-height:1; padding:0;}
+  .dc-btn:hover{background:var(--paper);}
+  .dc-btn.active{background:var(--navy-deep); color:#fff; border-color:var(--navy-deep);}
+  .dc-btn-red.active{background:var(--names-red); color:#fff; border-color:var(--names-red);}
+  .day-comment-input{
+    width:100%; min-height:46px; border:1px dotted var(--paper-line); border-radius:3px;
+    padding:5px 6px; resize:vertical; background:#FBFAF6; font-family:inherit; box-sizing:border-box;
+  }
+  .day-comment-input:focus{outline:none; border-color:var(--navy);}
   .day-col-actions{
     display:flex; justify-content:space-between; align-items:center; padding:7px 10px;
     border-bottom:1px solid var(--paper-line);
@@ -330,7 +344,7 @@
 
   @media print{
     *{-webkit-print-color-adjust:exact !important; print-color-adjust:exact !important; color-adjust:exact !important;}
-    .toolbar, .legend, .add-block-btn, .add-day-col, .day-col-actions, .block-edit-row, .resize-handle, .resize-handle-h{display:none !important;}
+    .toolbar, .legend, .add-block-btn, .add-day-col, .day-col-actions, .block-edit-row, .resize-handle, .resize-handle-h, .day-comment-toolbar{display:none !important;}
     body{background:#fff;}
     .board{overflow:visible; flex-wrap:wrap;}
     .day-col{break-inside:avoid; box-shadow:none;}
@@ -1011,6 +1025,23 @@ try{
           ${recap.interims.length ? `<div class="day-recap-line"><b>Intérimaires :</b> ${recap.interims.map(p=> p.highlight ? `<span class="recap-highlight">${escapeHtml(p.display)}</span>` : p.highlightBlue ? `<span class="recap-highlight-blue">${escapeHtml(p.display)}</span>` : escapeHtml(p.display)).join(", ")}</div>` : ""}
         </div>` : "";
 
+      const commentSize = day.commentSize || 13;
+      const commentHtml = `
+        <div class="day-comment-box">
+          <div class="day-comment-toolbar">
+            <span class="dc-label">Commentaires</span>
+            <select class="dc-size-select" data-action="comment-size" data-day="${day.id}">
+              <option value="11" ${commentSize==11?"selected":""}>Petit</option>
+              <option value="13" ${commentSize==13?"selected":""}>Normal</option>
+              <option value="16" ${commentSize==16?"selected":""}>Grand</option>
+            </select>
+            <button class="dc-btn ${day.commentBold?'active':''}" data-action="comment-bold" data-day="${day.id}" title="Gras"><b>G</b></button>
+            <button class="dc-btn dc-btn-red ${day.commentRed?'active':''}" data-action="comment-red" data-day="${day.id}" title="Rouge">●</button>
+          </div>
+          <textarea class="day-comment-input" data-field="comment" data-day="${day.id}" placeholder="Notes importantes pour cette journée..."
+            style="font-size:${commentSize}px; font-weight:${day.commentBold?700:400}; color:${day.commentRed?'var(--names-red)':'var(--ink)'};">${escapeHtml(day.comment||"")}</textarea>
+        </div>`;
+
       return `
       <div class="day-col" style="width:${colWidth}px;" data-day-id="${day.id}">
         <div class="day-head">
@@ -1039,6 +1070,7 @@ try{
         <div class="time-grid" style="${gridStyle}">${labelsHtml}${blocksHtml}</div>
         <button class="add-block-btn" data-action="add-block" data-day="${day.id}">+ Ajouter un module</button>
         ${recapHtml}
+        ${commentHtml}
       </div>`;
     }).join("") + `<div class="add-day-col" id="addDayBtn">+ Ajouter<br>un jour</div>`;
 
@@ -1093,7 +1125,22 @@ try{
       day.lanes = newLanes;
       compactDayLanes(day);
       save(); renderBoard();
+    } else if(action === "comment-bold"){
+      day.commentBold = !day.commentBold;
+      save(); renderBoard();
+    } else if(action === "comment-red"){
+      day.commentRed = !day.commentRed;
+      save(); renderBoard();
     }
+  });
+
+  boardEl.addEventListener("change", e=>{
+    if(e.target.dataset.action !== "comment-size") return;
+    const dayId = e.target.dataset.day;
+    const day = activeWeek().days.find(d=>d.id===dayId);
+    if(!day) return;
+    day.commentSize = Number(e.target.value);
+    save(); renderBoard();
   });
 
   boardEl.addEventListener("dblclick", e=>{
