@@ -908,10 +908,7 @@ try{
   // Si un "prénom réel" est renseigné, c'est lui qu'on affiche partout à la place.
   function personDisplay(p){
     if(!p) return "";
-    if(p.displayName && p.displayName.trim()){
-      const dn = p.displayName.trim();
-      return p.type==='interimaire' ? "Int."+dn : dn;
-    }
+    if(p.displayName && p.displayName.trim()) return p.displayName.trim();
     return p.name;
   }
   function displayForRawName(rawName){
