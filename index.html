@@ -161,6 +161,9 @@
   .resize-handle.top{top:0;}
   .resize-handle.bottom{bottom:0;}
   .resize-handle:hover{background:rgba(255,255,255,.45);}
+  .resize-handle-h{position:absolute; top:0; bottom:0; width:8px; cursor:ew-resize; z-index:3;}
+  .resize-handle-h.right{right:0;}
+  .resize-handle-h:hover{background:rgba(255,255,255,.45);}
   .block-strip{height:4px; flex:0 0 auto;}
   .block-body{padding:4px 7px 5px; position:relative; overflow:hidden; flex:1 1 auto; min-height:0;}
   .block-top{display:flex; justify-content:space-between; align-items:baseline; gap:5px;}
@@ -327,7 +330,7 @@
 
   @media print{
     *{-webkit-print-color-adjust:exact !important; print-color-adjust:exact !important; color-adjust:exact !important;}
-    .toolbar, .legend, .add-block-btn, .add-day-col, .day-col-actions, .block-edit-row, .resize-handle{display:none !important;}
+    .toolbar, .legend, .add-block-btn, .add-day-col, .day-col-actions, .block-edit-row, .resize-handle, .resize-handle-h{display:none !important;}
     body{background:#fff;}
     .board{overflow:visible; flex-wrap:wrap;}
     .day-col{break-inside:avoid; box-shadow:none;}
@@ -744,16 +747,33 @@ try{
     return {perms, interims};
   }
 
-  // Every module occupies exactly one column. This renumbers a day's lanes to
-  // consecutive integers based on what's actually in use (closes gaps automatically,
-  // e.g. after a block is moved out of a column or deleted).
+  // Renumérote les colonnes d'un jour à partir de ce qui est réellement occupé (referme les
+  // trous automatiquement). Si aucun module n'est étiré sur plusieurs colonnes, les colonnes
+  // vides se referment comme avant. Si un module est étiré (laneSpan > 1), on ne renumérote
+  // pas ses voisins pour ne pas casser son étirement — on se contente de recalculer le nombre
+  // de colonnes nécessaires et de garder chaque module dans les limites.
   function compactDayLanes(day){
     if(!day.blocks.length){ day.lanes = 1; return; }
-    const used = Array.from(new Set(day.blocks.map(b=>b.lane||0))).sort((a,b)=>a-b);
-    const remap = {};
-    used.forEach((oldLane,i)=>{ remap[oldLane]=i; });
-    day.blocks.forEach(b=>{ b.lane = remap[b.lane||0]; b.laneSpan = 1; });
-    day.lanes = Math.max(1, used.length);
+    const hasSpan = day.blocks.some(b=> (b.laneSpan||1) > 1);
+    if(!hasSpan){
+      const used = Array.from(new Set(day.blocks.map(b=>b.lane||0))).sort((a,b)=>a-b);
+      const remap = {};
+      used.forEach((oldLane,i)=>{ remap[oldLane]=i; });
+      day.blocks.forEach(b=>{ b.lane = remap[b.lane||0]; b.laneSpan = 1; });
+      day.lanes = Math.max(1, used.length);
+    } else {
+      let maxEnd = 1;
+      day.blocks.forEach(b=>{
+        b.lane = Math.max(0, b.lane||0);
+        b.laneSpan = Math.max(1, b.laneSpan||1);
+        maxEnd = Math.max(maxEnd, b.lane + b.laneSpan);
+      });
+      day.lanes = Math.min(3, maxEnd);
+      day.blocks.forEach(b=>{
+        if(b.lane >= day.lanes) b.lane = day.lanes-1;
+        b.laneSpan = Math.min(b.laneSpan, day.lanes - b.lane);
+      });
+    }
   }
 
   function exampleWeek(){
@@ -958,10 +978,12 @@ try{
         const endRow = Math.min(totalRows, slotIndex(week.grid, b.end));
         const span = Math.max(1, endRow-startRow);
         const lane = Math.min(b.lane||0, lanes-1);
+        const laneSpan = Math.max(1, Math.min(b.laneSpan||1, lanes-lane));
         return `
-        <div class="block-card" data-block-id="${b.id}" style="background:${t.color}; grid-column:${lane+2} / span 1; grid-row:${startRow+1} / span ${span};">
+        <div class="block-card" data-block-id="${b.id}" style="background:${t.color}; grid-column:${lane+2} / span ${laneSpan}; grid-row:${startRow+1} / span ${span};">
           <div class="resize-handle top" data-resize="top"></div>
           <div class="resize-handle bottom" data-resize="bottom"></div>
+          ${lanes>1 ? `<div class="resize-handle-h right" data-resize-h="right" title="Étirer sur plusieurs colonnes"></div>` : ""}
           <div class="block-strip" style="background:${t.strip}"></div>
           <div class="block-body">
             <div class="block-edit-row">
@@ -1113,9 +1135,10 @@ try{
 
   boardEl.addEventListener("pointerdown", e=>{
     const resizeHandle = e.target.closest("[data-resize]");
+    const resizeHandleH = e.target.closest("[data-resize-h]");
     const card = e.target.closest(".block-card");
     if(!card) return;
-    if(!resizeHandle && e.target.closest(".block-edit-row")) return;
+    if(!resizeHandle && !resizeHandleH && e.target.closest(".block-edit-row")) return;
 
     const dayCol = card.closest(".day-col");
     const week = activeWeek();
@@ -1129,7 +1152,15 @@ try{
     const startRow = slotIndex(week.grid, block.start);
     const endRow = slotIndex(week.grid, block.end);
 
-    if(resizeHandle){
+    if(resizeHandleH){
+      const lanes = day.lanes||1;
+      drag = {
+        mode:'resize-width',
+        card, day, block, gridRect, lanes,
+        origLane: block.lane||0, newLaneSpan: Math.max(1, block.laneSpan||1),
+        pointerId:e.pointerId, moved:false, startX:e.clientX, startY:e.clientY
+      };
+    } else if(resizeHandle){
       drag = {
         mode: resizeHandle.dataset.resize==='top' ? 'resize-top' : 'resize-bottom',
         card, day, block, gridRect, totalRows,
@@ -1143,6 +1174,7 @@ try{
         pointerId:e.pointerId, card, sourceDay:day, block,
         grabX:e.clientX-cardRect.left, grabY:e.clientY-cardRect.top,
         span: Math.max(1, endRow-startRow),
+        laneSpan: Math.max(1, block.laneSpan||1),
         moved:false, startX:e.clientX, startY:e.clientY,
         ghost:null, targetDay:null, targetRow:0, targetLaneRequest:0,
         lastGridEl:null, lastGridOrigTemplate:undefined
@@ -1175,16 +1207,17 @@ try{
       const gridEl = hoveredCol.querySelector(".time-grid");
       const gridRect = gridEl.getBoundingClientRect();
       const baseLanes = day.lanes||1;
+      const span = Math.min(drag.laneSpan||1, baseLanes);
 
       let laneRequest, expand=null, previewLanes=baseLanes, previewIndex;
-      if(baseLanes<3 && e.clientX > gridRect.right - EDGE_PX){
+      if(span===1 && baseLanes<3 && e.clientX > gridRect.right - EDGE_PX){
         laneRequest = baseLanes; expand='right'; previewLanes = baseLanes+1; previewIndex = baseLanes;
-      } else if(baseLanes<3 && e.clientX < gridRect.left + 54 + EDGE_PX){
+      } else if(span===1 && baseLanes<3 && e.clientX < gridRect.left + 54 + EDGE_PX){
         laneRequest = -1; expand='left'; previewLanes = baseLanes+1; previewIndex = 0;
       } else {
         const laneWidth = (gridRect.width-54)/baseLanes;
         let l = Math.round((topLeftX-gridRect.left-54)/laneWidth);
-        laneRequest = Math.max(0, Math.min(baseLanes-1, l));
+        laneRequest = Math.max(0, Math.min(baseLanes-span, l));
         previewIndex = laneRequest;
       }
 
@@ -1204,9 +1237,17 @@ try{
 
       if(!drag.ghost){ drag.ghost = document.createElement("div"); drag.ghost.className = "block-ghost"; }
       if(drag.ghost.parentElement !== gridEl) gridEl.appendChild(drag.ghost);
-      drag.ghost.style.gridColumn = (previewIndex+2)+" / span 1";
+      drag.ghost.style.gridColumn = (previewIndex+2)+" / span "+span;
       drag.ghost.style.gridRow = (row+1)+" / span "+drag.span;
 
+    } else if(drag.mode === 'resize-width'){
+      const laneWidth = (drag.gridRect.width-54)/drag.lanes;
+      const relX = e.clientX - drag.gridRect.left - 54;
+      const pointerLane = relX / laneWidth;
+      let span = Math.round(pointerLane - drag.origLane);
+      span = Math.max(1, Math.min(drag.lanes - drag.origLane, span));
+      drag.newLaneSpan = span;
+      drag.card.style.gridColumn = (drag.origLane+2)+" / span "+span;
     } else {
       // resize-top / resize-bottom
       const rowPos = Math.round((e.clientY - drag.gridRect.top)/ROW_H);
@@ -1238,12 +1279,16 @@ try{
         compactDayLanes(drag.targetDay);
       } else {
         const copy = {...drag.block, id:uid(), people:[...drag.block.people],
-          start:newStart, end:newEnd, lane:drag.targetLaneRequest, laneSpan:1};
+          start:newStart, end:newEnd, lane:drag.targetLaneRequest, laneSpan:drag.laneSpan||1};
         drag.targetDay.blocks.push(copy);
         compactDayLanes(drag.targetDay);
       }
       save();
-    } else if(drag.mode !== 'move' && drag.moved){
+    } else if(drag.mode === 'resize-width' && drag.moved){
+      drag.block.laneSpan = drag.newLaneSpan;
+      compactDayLanes(drag.day);
+      save();
+    } else if(drag.mode !== 'move' && drag.mode !== 'resize-width' && drag.moved){
       const week = activeWeek();
       const newStartMin = toMin(week.grid.start) + drag.newStartRow*Number(week.grid.step);
       const newEndMin = toMin(week.grid.start) + drag.newEndRow*Number(week.grid.step);
@@ -1362,10 +1407,12 @@ try{
     }
     const lanes = day.lanes || 1;
     const lane = lanes>1 ? editingCtx.lane : 0;
+    const existingSpan = editingCtx.block ? Math.max(1, editingCtx.block.laneSpan||1) : 1;
+    const laneSpan = lanes>1 ? Math.min(existingSpan, lanes-lane) : 1;
 
     const data = {
       typeId: editingCtx.selectedType,
-      start, end, lane, laneSpan:1,
+      start, end, lane, laneSpan,
       people: Array.from(editingCtx.selectedPeople),
       note: blockNoteEl.value.trim()
     };
