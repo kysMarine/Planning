@@ -167,6 +167,8 @@
     cursor:grab; touch-action:none; user-select:none;
   }
   .block-card.dragging{opacity:.35;}
+  .block-card.selected{outline:2.5px solid #2f6fed; outline-offset:-2.5px; box-shadow:0 0 0 4px rgba(47,111,237,.18);}
+  @media print{ .block-card.selected{outline:none; box-shadow:none;} }
   .block-ghost{
     border:2px dashed rgba(27,44,51,.55); border-radius:4px; margin:1px 3px;
     background:rgba(255,255,255,.35); pointer-events:none;
@@ -990,8 +992,9 @@ try{
         const span = Math.max(1, endRow-startRow);
         const lane = Math.min(b.lane||0, lanes-1);
         const laneSpan = Math.max(1, Math.min(b.laneSpan||1, lanes-lane));
+        const isSelected = selectedBlockRef && selectedBlockRef.dayId===day.id && selectedBlockRef.blockId===b.id;
         return `
-        <div class="block-card" data-block-id="${b.id}" style="background:${t.color}; grid-column:${lane+2} / span ${laneSpan}; grid-row:${startRow+1} / span ${span};">
+        <div class="block-card${isSelected?' selected':''}" data-block-id="${b.id}" style="background:${t.color}; grid-column:${lane+2} / span ${laneSpan}; grid-row:${startRow+1} / span ${span};">
           <div class="resize-handle top" data-resize="top"></div>
           <div class="resize-handle bottom" data-resize="bottom"></div>
           ${lanes>1 ? `<div class="resize-handle-h right" data-resize-h="right" title="Étirer sur plusieurs colonnes"></div>` : ""}
@@ -1091,7 +1094,28 @@ try{
 
   boardEl.addEventListener("click", e=>{
     const btn = e.target.closest("[data-action]");
-    if(!btn) return;
+    if(!btn){
+      if(ignoreNextClick){ ignoreNextClick = false; return; }
+      const card = e.target.closest(".block-card");
+      const prevSelectedCard = selectedBlockRef ? boardEl.querySelector(`.block-card[data-block-id="${selectedBlockRef.blockId}"]`) : null;
+      if(card){
+        const dayCol = card.closest(".day-col");
+        const dayId = dayCol && dayCol.dataset.dayId;
+        const blockId = card.dataset.blockId;
+        if(selectedBlockRef && selectedBlockRef.dayId===dayId && selectedBlockRef.blockId===blockId){
+          selectedBlockRef = null;
+          card.classList.remove("selected");
+        } else {
+          if(prevSelectedCard) prevSelectedCard.classList.remove("selected");
+          selectedBlockRef = {dayId, blockId};
+          card.classList.add("selected");
+        }
+      } else if(selectedBlockRef && e.target.closest(".time-grid")){
+        if(prevSelectedCard) prevSelectedCard.classList.remove("selected");
+        selectedBlockRef = null;
+      }
+      return;
+    }
     const action = btn.dataset.action;
     const week = activeWeek();
     const dayId = btn.dataset.day;
@@ -1104,12 +1128,14 @@ try{
       openBlockModal(day, block);
     } else if(action === "delete-block"){
       if(confirm("Supprimer ce module ?")){
+        if(selectedBlockRef && selectedBlockRef.blockId===btn.dataset.block) selectedBlockRef = null;
         day.blocks = day.blocks.filter(b=>b.id!==btn.dataset.block);
         compactDayLanes(day);
         save(); renderBoard();
       }
     } else if(action === "delete-day"){
       if(confirm("Supprimer ce jour et tous ses modules ?")){
+        if(selectedBlockRef && selectedBlockRef.dayId===dayId) selectedBlockRef = null;
         week.days = week.days.filter(d=>d.id!==dayId);
         save(); renderBoard();
       }
@@ -1176,6 +1202,62 @@ try{
 
   // ---------- Drag: move / duplicate / edge-split columns / resize ----------
   let drag = null;
+
+  // ---------- Selection + copy/paste (Ctrl+C / Ctrl+V) ----------
+  let selectedBlockRef = null; // {dayId, blockId}
+  let blockClipboard = null;   // deep copy of a block's data (no id)
+  let lastHoverDayId = null;   // day under the mouse, used as paste target
+  let ignoreNextClick = false; // set after a real drag so the trailing click doesn't (re)select
+
+  function findDayAndBlock(dayId, blockId){
+    const week = activeWeek();
+    if(!week) return null;
+    const day = week.days.find(d=>d.id===dayId);
+    if(!day) return null;
+    const block = day.blocks.find(b=>b.id===blockId);
+    if(!block) return null;
+    return {day, block};
+  }
+
+  boardEl.addEventListener("mouseover", e=>{
+    const col = e.target.closest(".day-col");
+    if(col) lastHoverDayId = col.dataset.dayId;
+  });
+
+  document.addEventListener("keydown", e=>{
+    if(!(e.ctrlKey || e.metaKey)) return;
+    const key = e.key.toLowerCase();
+    if(key !== 'c' && key !== 'v') return;
+    const tag = (document.activeElement && document.activeElement.tagName) || "";
+    if(tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || (document.activeElement && document.activeElement.isContentEditable)) return;
+    if(!document.getElementById("planningPage") || document.getElementById("planningPage").classList.contains("hidden")) return;
+
+    if(key === 'c'){
+      if(!selectedBlockRef) return;
+      const found = findDayAndBlock(selectedBlockRef.dayId, selectedBlockRef.blockId);
+      if(!found) return;
+      e.preventDefault();
+      blockClipboard = {...found.block, people:[...found.block.people]};
+      delete blockClipboard.id;
+    } else if(key === 'v'){
+      if(!blockClipboard) return;
+      const week = activeWeek();
+      if(!week) return;
+      const targetDayId = lastHoverDayId || (selectedBlockRef && selectedBlockRef.dayId) || (week.days[0] && week.days[0].id);
+      const day = week.days.find(d=>d.id===targetDayId);
+      if(!day) return;
+      e.preventDefault();
+      const lanes = day.lanes || 1;
+      const laneSpan = Math.max(1, Math.min(blockClipboard.laneSpan||1, lanes));
+      const lane = Math.max(0, Math.min(blockClipboard.lane||0, lanes-laneSpan));
+      const newBlock = {...blockClipboard, id:uid(), people:[...blockClipboard.people], lane, laneSpan};
+      day.blocks.push(newBlock);
+      compactDayLanes(day);
+      selectedBlockRef = {dayId:day.id, blockId:newBlock.id};
+      save();
+      renderBoard();
+    }
+  });
 
   boardEl.addEventListener("pointerdown", e=>{
     const resizeHandle = e.target.closest("[data-resize]");
@@ -1340,7 +1422,7 @@ try{
       drag.block.end = fromMin(newEndMin);
       save();
     }
-    if(drag.moved) renderBoard();
+    if(drag.moved){ ignoreNextClick = true; renderBoard(); }
     drag = null;
   }
   boardEl.addEventListener("pointerup", e=>{ if(drag && e.pointerId===drag.pointerId) endDrag(); });
