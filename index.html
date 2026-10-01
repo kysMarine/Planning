@@ -1165,15 +1165,18 @@ try{
         const blockId = card.dataset.blockId;
         if(selectedBlockRef && selectedBlockRef.dayId===dayId && selectedBlockRef.blockId===blockId){
           selectedBlockRef = null;
+          typedSinceSelect = false;
           card.classList.remove("selected");
         } else {
           if(prevSelectedCard) prevSelectedCard.classList.remove("selected");
           selectedBlockRef = {dayId, blockId};
+          typedSinceSelect = false;
           card.classList.add("selected");
         }
       } else if(selectedBlockRef && e.target.closest(".time-grid")){
         if(prevSelectedCard) prevSelectedCard.classList.remove("selected");
         selectedBlockRef = null;
+        typedSinceSelect = false;
       }
       return;
     }
@@ -1189,14 +1192,14 @@ try{
       openBlockModal(day, block);
     } else if(action === "delete-block"){
       if(confirm("Supprimer ce module ?")){
-        if(selectedBlockRef && selectedBlockRef.blockId===btn.dataset.block) selectedBlockRef = null;
+        if(selectedBlockRef && selectedBlockRef.blockId===btn.dataset.block){ selectedBlockRef = null; typedSinceSelect = false; }
         day.blocks = day.blocks.filter(b=>b.id!==btn.dataset.block);
         compactDayLanes(day);
         save(); renderBoard();
       }
     } else if(action === "delete-day"){
       if(confirm("Supprimer ce jour et tous ses modules ?")){
-        if(selectedBlockRef && selectedBlockRef.dayId===dayId) selectedBlockRef = null;
+        if(selectedBlockRef && selectedBlockRef.dayId===dayId){ selectedBlockRef = null; typedSinceSelect = false; }
         week.days = week.days.filter(d=>d.id!==dayId);
         save(); renderBoard();
       }
@@ -1269,6 +1272,7 @@ try{
   let blockClipboard = null;   // deep copy of a block's data (no id)
   let lastHoverDayId = null;   // day under the mouse, used as paste target
   let ignoreNextClick = false; // set after a real drag so the trailing click doesn't (re)select
+  let typedSinceSelect = false; // true once the currently selected block's note has been overwritten by live typing
 
   function findDayAndBlock(dayId, blockId){
     const week = activeWeek();
@@ -1280,27 +1284,52 @@ try{
     return {day, block};
   }
 
+  // Met à jour le commentaire affiché sur une carte sans reconstruire tout le board
+  // (évite de perdre le défilement / la sélection à chaque frappe).
+  function liveUpdateBlockNote(block){
+    const card = boardEl.querySelector(`.block-card[data-block-id="${block.id}"]`);
+    if(!card) return;
+    const body = card.querySelector(".block-body");
+    if(!body) return;
+    let noteEl = body.querySelector(".block-note");
+    if(!block.note){
+      if(noteEl) noteEl.remove();
+      return;
+    }
+    if(!noteEl){
+      noteEl = document.createElement("div");
+      noteEl.className = "block-note";
+      body.appendChild(noteEl);
+    }
+    noteEl.textContent = block.note;
+  }
+
   boardEl.addEventListener("mouseover", e=>{
     const col = e.target.closest(".day-col");
     if(col) lastHoverDayId = col.dataset.dayId;
   });
 
   document.addEventListener("keydown", e=>{
-    if(!(e.ctrlKey || e.metaKey)) return;
-    const key = e.key.toLowerCase();
-    if(key !== 'c' && key !== 'v') return;
     const tag = (document.activeElement && document.activeElement.tagName) || "";
     if(tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || (document.activeElement && document.activeElement.isContentEditable)) return;
-    if(!document.getElementById("planningPage") || document.getElementById("planningPage").classList.contains("hidden")) return;
+    if(document.querySelector(".overlay.open")) return;
+    const planningPageEl = document.getElementById("planningPage");
+    if(!planningPageEl || planningPageEl.style.display === "none") return;
 
-    if(key === 'c'){
-      if(!selectedBlockRef) return;
-      const found = findDayAndBlock(selectedBlockRef.dayId, selectedBlockRef.blockId);
-      if(!found) return;
-      e.preventDefault();
-      blockClipboard = {...found.block, people:[...found.block.people]};
-      delete blockClipboard.id;
-    } else if(key === 'v'){
+    if(e.ctrlKey || e.metaKey){
+      const key = e.key.toLowerCase();
+      if(key !== 'c' && key !== 'v') return;
+
+      if(key === 'c'){
+        if(!selectedBlockRef) return;
+        const found = findDayAndBlock(selectedBlockRef.dayId, selectedBlockRef.blockId);
+        if(!found) return;
+        e.preventDefault();
+        blockClipboard = {...found.block, people:[...found.block.people]};
+        delete blockClipboard.id;
+        return;
+      }
+
       if(!blockClipboard) return;
       const week = activeWeek();
       if(!week) return;
@@ -1315,8 +1344,47 @@ try{
       day.blocks.push(newBlock);
       compactDayLanes(day);
       selectedBlockRef = {dayId:day.id, blockId:newBlock.id};
+      typedSinceSelect = false;
       save();
       renderBoard();
+      return;
+    }
+
+    // Pas de Ctrl/Cmd : si un module est sélectionné, la frappe s'écrit directement dans son commentaire.
+    if(!selectedBlockRef || e.altKey) return;
+    const found = findDayAndBlock(selectedBlockRef.dayId, selectedBlockRef.blockId);
+    if(!found) return;
+    const block = found.block;
+
+    if(e.key === 'Escape'){
+      const card = boardEl.querySelector(`.block-card[data-block-id="${block.id}"]`);
+      if(card) card.classList.remove("selected");
+      selectedBlockRef = null;
+      typedSinceSelect = false;
+      return;
+    }
+    if(e.key === 'Backspace' || e.key === 'Delete'){
+      e.preventDefault();
+      block.note = (block.note || "").slice(0, -1);
+      typedSinceSelect = true;
+      liveUpdateBlockNote(block);
+      save();
+      return;
+    }
+    if(e.key === 'Enter'){
+      e.preventDefault();
+      if(!typedSinceSelect){ block.note = ""; typedSinceSelect = true; }
+      block.note = (block.note || "") + "\n";
+      liveUpdateBlockNote(block);
+      save();
+      return;
+    }
+    if(e.key.length === 1){
+      e.preventDefault();
+      if(!typedSinceSelect){ block.note = ""; typedSinceSelect = true; }
+      block.note = (block.note || "") + e.key;
+      liveUpdateBlockNote(block);
+      save();
     }
   });
 
@@ -1608,6 +1676,7 @@ try{
     } else {
       day.blocks.push({id:uid(), ...data});
     }
+    typedSinceSelect = false;
     compactDayLanes(day);
     save();
     closeOverlay("blockOverlay");
