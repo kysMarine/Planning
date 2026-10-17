@@ -360,6 +360,15 @@
   }
   .save-toast.show{opacity:1; transform:translateX(-50%) translateY(0);}
 
+  /* ---------- Lock mode (évite les déplacements/suppressions accidentels au doigt) ---------- */
+  /* On neutralise les descendants (modules, boutons, champs) mais pas .day-col / .board
+     eux-mêmes, pour que le défilement tactile (overflow-x du board) continue à fonctionner. */
+  .board.locked .day-col *, .board.locked .add-day-col{pointer-events:none;}
+  .board.locked .day-col{opacity:.93;}
+  #lockToggleBtn{font-weight:700;}
+  #lockToggleBtn.locked-on{background:#c0392b; color:#fff; border-color:#c0392b;}
+  #lockToggleBtn.locked-off{background:#2e7d32; color:#fff; border-color:#2e7d32;}
+
   @media print{
     *{-webkit-print-color-adjust:exact !important; print-color-adjust:exact !important; color-adjust:exact !important;}
     .toolbar, .legend, .add-block-btn, .add-day-col, .day-col-actions, .block-edit-row, .resize-handle, .resize-handle-h, .day-comment-toolbar{display:none !important;}
@@ -381,6 +390,7 @@
     <button class="main-tab" id="tabTeamBtn" data-page="team">Équipe</button>
     <button class="main-tab" id="tabArchivesBtn" data-page="archives">Archives</button>
   </nav>
+  <button class="btn" id="lockToggleBtn" title="Verrouiller/déverrouiller le planning">🔒 Verrouillé</button>
   <button class="btn" id="toolbarToggleBtn" title="Afficher/masquer les outils">☰ Outils</button>
   <div class="toolbar-actions" id="toolbarActions">
     <select class="btn" id="weekSelect" title="Charger une semaine enregistrée"></select>
@@ -1136,6 +1146,7 @@ try{
     }).join("") + `<div class="add-day-col" id="addDayBtn">+ Ajouter<br>un jour</div>`;
 
     document.getElementById("addDayBtn").addEventListener("click", ()=>{
+      if(boardLocked) return;
       week.days.push({id:uid(), label:"Nouveau jour", date:"", coef:"", horaire:"", lanes:1, blocks:[]});
       save(); renderBoard();
     });
@@ -1144,6 +1155,7 @@ try{
   function renderAll(){ renderLegend(); renderWeekSelect(); renderBoard(); }
 
   boardEl.addEventListener("input", e=>{
+    if(boardLocked) return;
     const field = e.target.dataset.field;
     if(!field) return;
     const dayId = e.target.dataset.day;
@@ -1154,6 +1166,7 @@ try{
   });
 
   boardEl.addEventListener("click", e=>{
+    if(boardLocked) return;
     const btn = e.target.closest("[data-action]");
     if(!btn){
       if(ignoreNextClick){ ignoreNextClick = false; return; }
@@ -1222,6 +1235,7 @@ try{
   });
 
   boardEl.addEventListener("change", e=>{
+    if(boardLocked) return;
     if(e.target.dataset.action !== "comment-size") return;
     const dayId = e.target.dataset.day;
     const day = activeWeek().days.find(d=>d.id===dayId);
@@ -1231,6 +1245,7 @@ try{
   });
 
   boardEl.addEventListener("dblclick", e=>{
+    if(boardLocked) return;
     const card = e.target.closest(".block-card");
     if(!card) return;
     if(e.target.closest(".block-edit-row")) return;
@@ -1242,6 +1257,7 @@ try{
   });
 
   boardEl.addEventListener("contextmenu", e=>{
+    if(boardLocked) return;
     if(e.target.closest(".block-card")) return; // right-click on an existing module: default menu
     const gridEl = e.target.closest(".time-grid");
     if(!gridEl) return;
@@ -1273,6 +1289,32 @@ try{
   let lastHoverDayId = null;   // day under the mouse, used as paste target
   let ignoreNextClick = false; // set after a real drag so the trailing click doesn't (re)select
   let typedSinceSelect = false; // true once the currently selected block's note has been overwritten by live typing
+
+  // ---------- Lock mode (protection tactile mobile) ----------
+  let boardLocked = true; // verrouillé par défaut à l'ouverture : évite les déplacements/suppressions accidentels au doigt
+
+  function setBoardLocked(locked){
+    boardLocked = locked;
+    boardEl.classList.toggle("locked", boardLocked);
+    const btn = document.getElementById("lockToggleBtn");
+    if(boardLocked){
+      btn.textContent = "🔒 Verrouillé";
+      btn.title = "Planning verrouillé — touchez pour déverrouiller et pouvoir modifier";
+      btn.classList.add("locked-on"); btn.classList.remove("locked-off");
+      if(selectedBlockRef){
+        const card = boardEl.querySelector(`.block-card[data-block-id="${selectedBlockRef.blockId}"]`);
+        if(card) card.classList.remove("selected");
+      }
+      selectedBlockRef = null;
+      typedSinceSelect = false;
+    } else {
+      btn.textContent = "🔓 Déverrouillé";
+      btn.title = "Planning déverrouillé — touchez pour verrouiller à nouveau";
+      btn.classList.add("locked-off"); btn.classList.remove("locked-on");
+    }
+  }
+  document.getElementById("lockToggleBtn").addEventListener("click", ()=> setBoardLocked(!boardLocked));
+  setBoardLocked(true);
 
   function findDayAndBlock(dayId, blockId){
     const week = activeWeek();
@@ -1310,6 +1352,7 @@ try{
   });
 
   document.addEventListener("keydown", e=>{
+    if(boardLocked) return;
     const tag = (document.activeElement && document.activeElement.tagName) || "";
     if(tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || (document.activeElement && document.activeElement.isContentEditable)) return;
     if(document.querySelector(".overlay.open")) return;
@@ -1389,6 +1432,7 @@ try{
   });
 
   boardEl.addEventListener("pointerdown", e=>{
+    if(boardLocked) return;
     const resizeHandle = e.target.closest("[data-resize]");
     const resizeHandleH = e.target.closest("[data-resize-h]");
     const card = e.target.closest(".block-card");
