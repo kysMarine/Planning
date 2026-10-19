@@ -238,6 +238,7 @@
   .archive-row-meta{font-size:12px; color:var(--ink-soft);}
   .archive-row-actions{display:flex; gap:6px; flex:0 0 auto;}
   .archive-row-actions .btn{color:var(--navy-deep); border-color:var(--paper-line); background:#fff;}
+  .archive-row-actions .btn.archive-delete-btn{color:#c0392b; border-color:#c0392b;}
   .archive-row-actions .btn:hover{background:var(--paper);}
   .archive-row-actions .btn:disabled{opacity:.5; cursor:default;}
 
@@ -1875,6 +1876,7 @@ try{
         <div class="archive-row-actions">
           <button class="btn" data-action="preview-week" data-week="${w.id}">Consulter</button>
           <button class="btn" data-action="open-week" data-week="${w.id}" ${isActive?"disabled":""}>${isActive?"Ouverte":"Ouvrir"}</button>
+          <button class="btn archive-delete-btn" data-action="delete-week" data-week="${w.id}" title="Supprimer cette semaine">Supprimer</button>
         </div>
       </div>`;
     }).join("");
@@ -1939,7 +1941,17 @@ try{
       return;
     }
     const openBtn = e.target.closest("[data-action='open-week']");
-    if(openBtn) openWeekById(openBtn.dataset.week);
+    if(openBtn){ openWeekById(openBtn.dataset.week); return; }
+    const delBtn = e.target.closest("[data-action='delete-week']");
+    if(delBtn){
+      const week = state.weeks.find(w=>w.id===delBtn.dataset.week);
+      if(!week) return;
+      if(state.weeks.length<=1){ alert("Impossible de supprimer la dernière semaine."); return; }
+      if(!confirm("Supprimer définitivement « "+(week.title||"Sans titre")+" » ?")) return;
+      state.weeks = state.weeks.filter(w=>w.id!==week.id);
+      if(state.activeWeekId===week.id) state.activeWeekId = state.weeks[0].id;
+      save(); renderAll(); renderArchivesList();
+    }
   });
 
   // ---------- Équipe de la semaine modal ----------
