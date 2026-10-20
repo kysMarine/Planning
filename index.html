@@ -637,7 +637,7 @@ try{
   // ---------- Sites (Carnac / Riantec) : données totalement séparées ----------
   const SITES = {
     carnac:  {label:"Carnac",  docId:"main",    storageKey:"kys_marine_planning_v5",         tides:true, port:"Port Quiberon"},
-    riantec: {label:"Riantec", docId:"riantec", storageKey:"kys_marine_planning_riantec_v1", tides:true, port:"Port-Louis"}
+    riantec: {label:"Riantec", docId:"riantec", storageKey:"kys_marine_planning_riantec_v1", tides:true, port:"Port-Louis", dayHours:true}
   };
   const SITE_KEY = "kys_marine_site";
   let currentSite = SITES[localStorage.getItem(SITE_KEY)] ? localStorage.getItem(SITE_KEY) : "carnac";
@@ -858,9 +858,10 @@ try{
   }
   // Plage horaire d'une journée : surcharge optionnelle (day.gridStart / day.gridEnd), sinon celle de la semaine.
   function dayGrid(week, day){
+    const allowed = !!(SITES[currentSite] && SITES[currentSite].dayHours);
     return {
-      start: (day && day.gridStart) || week.grid.start,
-      end:   (day && day.gridEnd)   || week.grid.end,
+      start: (allowed && day && day.gridStart) || week.grid.start,
+      end:   (allowed && day && day.gridEnd)   || week.grid.end,
       step:  week.grid.step
     };
   }
@@ -1147,7 +1148,8 @@ try{
       const dg = dayGrid(week, day);
       const times = gridTimes(dg);
       const totalRows = times.length - 1;
-      const customHours = !!(day.gridStart || day.gridEnd);
+      const dayHoursAllowed = !!SITES[currentSite].dayHours;
+      const customHours = dayHoursAllowed && !!(day.gridStart || day.gridEnd);
       const lanes = day.lanes || 1;
       const colWidth = 54 + lanes*128;
 
@@ -1238,7 +1240,7 @@ try{
           </div>
           <button class="icon-btn" data-action="delete-day" data-day="${day.id}" title="Supprimer ce jour">✕ jour</button>
         </div>
-        <button class="day-hours-btn${customHours?' custom':''}" data-action="day-hours" data-day="${day.id}" title="Étendre ou raccourcir la plage horaire de cette journée">⏱ ${fmtFR(dg.start)} – ${fmtFR(dg.end)}${customHours?' (perso)':''}</button>
+        ${dayHoursAllowed ? `<button class="day-hours-btn${customHours?' custom':''}" data-action="day-hours" data-day="${day.id}" title="Étendre ou raccourcir la plage horaire de cette journée">⏱ ${fmtFR(dg.start)} – ${fmtFR(dg.end)}${customHours?' (perso)':''}</button>` : ""}
         <div class="time-grid" style="${gridStyle}">${labelsHtml}${blocksHtml}</div>
         <button class="add-block-btn" data-action="add-block" data-day="${day.id}">+ Ajouter un module</button>
         ${recapHtml}
