@@ -364,6 +364,14 @@
   /* ---------- Lock mode (évite les déplacements/suppressions accidentels au doigt) ---------- */
   /* On neutralise les descendants (modules, boutons, champs) mais pas .day-col / .board
      eux-mêmes, pour que le défilement tactile (overflow-x du board) continue à fonctionner. */
+  .day-hours-btn{
+    display:block; width:calc(100% - 16px); margin:6px 8px 0; padding:4px 6px;
+    border:1px dashed var(--paper-line); background:transparent; border-radius:4px;
+    font-size:11.5px; color:var(--ink-soft); cursor:pointer; text-align:center;
+  }
+  .day-hours-btn:hover{background:var(--paper);}
+  .day-hours-btn.custom{border-style:solid; border-color:var(--gold, #D4A93A); color:var(--navy-deep); font-weight:700;}
+  @media print{ .day-hours-btn{display:none !important;} }
   .board.locked .day-col *, .board.locked .add-day-col{pointer-events:none;}
   .board.locked .day-col{opacity:.93;}
   #lockToggleBtn{font-weight:700;}
@@ -551,6 +559,23 @@
     <h2 id="tideOverlayTitle">Marées — Port Quiberon</h2>
     <p class="modal-sub">Coefficient et horaire de la marée basse en journée (6h-18h), mois par mois. Les lignes marquées d'un * sont approximatives.</p>
     <div id="tideOverlayContent"></div>
+  </div>
+</div>
+
+<!-- Modal: plage horaire d'une journée -->
+<div class="overlay" id="dayHoursOverlay">
+  <div class="modal" style="max-width:380px;">
+    <button class="close-x" data-close="dayHoursOverlay">✕</button>
+    <h2 id="dayHoursTitle">Plage horaire</h2>
+    <div class="row-2">
+      <div class="field"><label>Début</label><input type="time" id="dayHoursStart"></div>
+      <div class="field"><label>Fin</label><input type="time" id="dayHoursEnd"></div>
+    </div>
+    <p style="font-size:12px; color:var(--ink-soft);">Ne s'applique qu'à cette journée. La plage ne peut pas exclure un module déjà placé.</p>
+    <div class="modal-actions">
+      <button class="btn" id="dayHoursResetBtn">Comme la semaine</button>
+      <button class="btn primary" id="dayHoursSaveBtn">Appliquer</button>
+    </div>
   </div>
 </div>
 
@@ -831,6 +856,14 @@ try{
     for(let m=toMin(grid.start); m<=toMin(grid.end); m+=Number(grid.step)) times.push(fromMin(m));
     return times;
   }
+  // Plage horaire d'une journée : surcharge optionnelle (day.gridStart / day.gridEnd), sinon celle de la semaine.
+  function dayGrid(week, day){
+    return {
+      start: (day && day.gridStart) || week.grid.start,
+      end:   (day && day.gridEnd)   || week.grid.end,
+      step:  week.grid.step
+    };
+  }
   function slotIndex(grid, t){ return Math.round((toMin(t)-toMin(grid.start))/Number(grid.step)); }
 
   function fmtDuration(totalMin){
@@ -1110,10 +1143,11 @@ try{
     if(!week){ boardEl.innerHTML = `<div class="empty-hint">Aucune semaine. Cliquez sur "+ Semaine vierge" pour commencer.</div>`; return; }
     weekTitleInput.value = week.title || "";
 
-    const times = gridTimes(week.grid);
-    const totalRows = times.length - 1;
-
     boardEl.innerHTML = week.days.map(day=>{
+      const dg = dayGrid(week, day);
+      const times = gridTimes(dg);
+      const totalRows = times.length - 1;
+      const customHours = !!(day.gridStart || day.gridEnd);
       const lanes = day.lanes || 1;
       const colWidth = 54 + lanes*128;
 
@@ -1124,8 +1158,8 @@ try{
 
       const blocksHtml = day.blocks.map(b=>{
         const t = typeById(b.typeId);
-        const startRow = Math.max(0, slotIndex(week.grid, b.start));
-        const endRow = Math.min(totalRows, slotIndex(week.grid, b.end));
+        const startRow = Math.max(0, slotIndex(dg, b.start));
+        const endRow = Math.min(totalRows, slotIndex(dg, b.end));
         const span = Math.max(1, endRow-startRow);
         const lane = Math.min(b.lane||0, lanes-1);
         const laneSpan = Math.max(1, Math.min(b.laneSpan||1, lanes-lane));
@@ -1204,6 +1238,7 @@ try{
           </div>
           <button class="icon-btn" data-action="delete-day" data-day="${day.id}" title="Supprimer ce jour">✕ jour</button>
         </div>
+        <button class="day-hours-btn${customHours?' custom':''}" data-action="day-hours" data-day="${day.id}" title="Étendre ou raccourcir la plage horaire de cette journée">⏱ ${fmtFR(dg.start)} – ${fmtFR(dg.end)}${customHours?' (perso)':''}</button>
         <div class="time-grid" style="${gridStyle}">${labelsHtml}${blocksHtml}</div>
         <button class="add-block-btn" data-action="add-block" data-day="${day.id}">+ Ajouter un module</button>
         ${recapHtml}
@@ -1282,6 +1317,8 @@ try{
         week.days = week.days.filter(d=>d.id!==dayId);
         save(); renderBoard();
       }
+    } else if(action === "day-hours"){
+      openDayHours(day);
     } else if(action === "lane-plus"){
       day.lanes = Math.min(3, (day.lanes||1)+1);
       save(); renderBoard();
@@ -1333,7 +1370,8 @@ try{
     const day = week.days.find(d=>d.id===dayCol.dataset.dayId);
     if(!day) return;
     const gridRect = gridEl.getBoundingClientRect();
-    const totalRows = gridTimes(week.grid).length - 1;
+    const dgrid = dayGrid(week, day);
+    const totalRows = gridTimes(dgrid).length - 1;
     const lanes = day.lanes || 1;
 
     let row = Math.floor((e.clientY-gridRect.top)/ROW_H);
@@ -1342,7 +1380,7 @@ try{
     let lane = Math.floor((e.clientX-gridRect.left-54)/laneWidth);
     lane = Math.max(0, Math.min(lanes-1, lane));
 
-    const startTime = fromMin(toMin(week.grid.start) + row*Number(week.grid.step));
+    const startTime = fromMin(toMin(dgrid.start) + row*Number(dgrid.step));
     openBlockModal(day, null, {start:startTime, lane});
   });
 
@@ -1513,9 +1551,10 @@ try{
 
     const gridEl = dayCol.querySelector(".time-grid");
     const gridRect = gridEl.getBoundingClientRect();
-    const totalRows = gridTimes(week.grid).length - 1;
-    const startRow = slotIndex(week.grid, block.start);
-    const endRow = slotIndex(week.grid, block.end);
+    const pdGrid = dayGrid(week, day);
+    const totalRows = gridTimes(pdGrid).length - 1;
+    const startRow = slotIndex(pdGrid, block.start);
+    const endRow = slotIndex(pdGrid, block.end);
 
     if(resizeHandleH){
       const lanes = day.lanes||1;
@@ -1557,7 +1596,6 @@ try{
     if(drag.mode === 'move'){
       drag.card.classList.add("dragging");
       const week = activeWeek();
-      const totalRows = gridTimes(week.grid).length - 1;
       const topLeftX = e.clientX - drag.grabX;
       const topLeftY = e.clientY - drag.grabY;
 
@@ -1569,6 +1607,7 @@ try{
       if(!hoveredCol) return;
 
       const day = week.days.find(d=>d.id===hoveredCol.dataset.dayId);
+      const totalRows = gridTimes(dayGrid(week, day)).length - 1;
       const gridEl = hoveredCol.querySelector(".time-grid");
       const gridRect = gridEl.getBoundingClientRect();
       const baseLanes = day.lanes||1;
@@ -1634,9 +1673,10 @@ try{
 
     if(drag.mode === 'move' && drag.moved && drag.targetDay){
       const week = activeWeek();
-      const newStartMin = toMin(week.grid.start) + drag.targetRow*Number(week.grid.step);
+      const tg = dayGrid(week, drag.targetDay);
+      const newStartMin = toMin(tg.start) + drag.targetRow*Number(tg.step);
       const newStart = fromMin(newStartMin);
-      const newEnd = fromMin(newStartMin + drag.span*Number(week.grid.step));
+      const newEnd = fromMin(newStartMin + drag.span*Number(tg.step));
 
       if(drag.targetDay.id === drag.sourceDay.id){
         drag.block.start = newStart; drag.block.end = newEnd;
@@ -1655,8 +1695,9 @@ try{
       save();
     } else if(drag.mode !== 'move' && drag.mode !== 'resize-width' && drag.moved){
       const week = activeWeek();
-      const newStartMin = toMin(week.grid.start) + drag.newStartRow*Number(week.grid.step);
-      const newEndMin = toMin(week.grid.start) + drag.newEndRow*Number(week.grid.step);
+      const rg = dayGrid(week, drag.day);
+      const newStartMin = toMin(rg.start) + drag.newStartRow*Number(rg.step);
+      const newEndMin = toMin(rg.start) + drag.newEndRow*Number(rg.step);
       drag.block.start = fromMin(newStartMin);
       drag.block.end = fromMin(newEndMin);
       save();
@@ -1692,7 +1733,7 @@ try{
     editingCtx.lane = block ? (block.lane||0) : (preset && preset.lane!=null ? preset.lane : 0);
 
     document.getElementById("blockModalTitle").textContent = block ? "Modifier le module" : "Ajouter un module";
-    const times = gridTimes(week.grid);
+    const times = gridTimes(dayGrid(week, day));
     blockStartEl.innerHTML = times.slice(0,-1).map(t=>`<option value="${t}">${fmtFR(t)}</option>`).join("");
     blockEndEl.innerHTML = times.slice(1).map(t=>`<option value="${t}">${fmtFR(t)}</option>`).join("");
     const startVal = block ? block.start : ((preset && preset.start) || times[0]);
@@ -2066,6 +2107,52 @@ try{
   document.getElementById("weekTeamBtn").addEventListener("click", ()=>{
     renderWeekTeamList();
     weekTeamOverlay.classList.add("open");
+  });
+
+  // ---------- Plage horaire par journée ----------
+  let dayHoursDay = null;
+  function openDayHours(day){
+    const week = activeWeek();
+    dayHoursDay = day;
+    const g = dayGrid(week, day);
+    document.getElementById("dayHoursTitle").textContent = "Plage horaire — "+(day.label||"Journée")+(day.date?" "+day.date:"");
+    document.getElementById("dayHoursStart").value = g.start;
+    document.getElementById("dayHoursEnd").value = g.end;
+    document.getElementById("dayHoursOverlay").classList.add("open");
+  }
+  document.getElementById("dayHoursSaveBtn").addEventListener("click", ()=>{
+    const week = activeWeek(); const day = dayHoursDay;
+    if(!day) return;
+    let start = document.getElementById("dayHoursStart").value || week.grid.start;
+    let end = document.getElementById("dayHoursEnd").value || week.grid.end;
+    if(toMin(end) <= toMin(start)){ alert("L'heure de fin doit être après l'heure de début."); return; }
+    // On ne coupe jamais un module existant : la plage s'élargit au besoin.
+    let adjusted = false;
+    day.blocks.forEach(b=>{
+      if(toMin(b.start) < toMin(start)){ start = b.start; adjusted = true; }
+      if(toMin(b.end) > toMin(end)){ end = b.end; adjusted = true; }
+    });
+    // Alignement sur le pas de la grille
+    const step = Number(week.grid.step);
+    const base = toMin(week.grid.start);
+    let sMin = base + Math.floor((toMin(start)-base)/step)*step;
+    let eMin = base + Math.ceil((toMin(end)-base)/step)*step;
+    if(sMin < 0) sMin = 0;
+    if(eMin > 24*60) eMin = 24*60;
+    start = fromMin(sMin); end = fromMin(eMin);
+    if(start === week.grid.start && end === week.grid.end){ delete day.gridStart; delete day.gridEnd; }
+    else { day.gridStart = start; day.gridEnd = end; }
+    save();
+    closeOverlay("dayHoursOverlay");
+    renderBoard();
+    if(adjusted) showSaveToast("Plage élargie pour garder les modules ✓");
+  });
+  document.getElementById("dayHoursResetBtn").addEventListener("click", ()=>{
+    const day = dayHoursDay; if(!day) return;
+    delete day.gridStart; delete day.gridEnd;
+    save();
+    closeOverlay("dayHoursOverlay");
+    renderBoard();
   });
 
   // ---------- Grid settings modal ----------
