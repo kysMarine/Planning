@@ -367,6 +367,7 @@
   .board.locked .day-col *, .board.locked .add-day-col{pointer-events:none;}
   .board.locked .day-col{opacity:.93;}
   #lockToggleBtn{font-weight:700;}
+  #siteSelect{font-weight:700;}
   #lockToggleBtn.locked-on{background:#c0392b; color:#fff; border-color:#c0392b;}
   #lockToggleBtn.locked-off{background:#2e7d32; color:#fff; border-color:#2e7d32;}
 
@@ -391,6 +392,10 @@
     <button class="main-tab" id="tabTeamBtn" data-page="team">Équipe</button>
     <button class="main-tab" id="tabArchivesBtn" data-page="archives">Archives</button>
   </nav>
+  <select class="btn" id="siteSelect" title="Changer de site">
+    <option value="carnac">Carnac</option>
+    <option value="riantec">Riantec</option>
+  </select>
   <button class="btn" id="lockToggleBtn" title="Verrouiller/déverrouiller le planning">🔒 Verrouillé</button>
   <button class="btn" id="toolbarToggleBtn" title="Afficher/masquer les outils">☰ Outils</button>
   <div class="toolbar-actions" id="toolbarActions">
@@ -543,7 +548,7 @@
 <div class="overlay" id="tideOverlay">
   <div class="modal" style="max-width:520px;">
     <button class="close-x" data-close="tideOverlay">✕</button>
-    <h2>Marées — Port Quiberon</h2>
+    <h2 id="tideOverlayTitle">Marées — Port Quiberon</h2>
     <p class="modal-sub">Coefficient et horaire de la marée basse en journée (6h-18h), mois par mois. Les lignes marquées d'un * sont approximatives.</p>
     <div id="tideOverlayContent"></div>
   </div>
@@ -604,7 +609,16 @@ try{
 
 (function(){
   "use strict";
-  const STORAGE_KEY = "kys_marine_planning_v5";
+  // ---------- Sites (Carnac / Riantec) : données totalement séparées ----------
+  const SITES = {
+    carnac:  {label:"Carnac",  docId:"main",    storageKey:"kys_marine_planning_v5",         tides:true, port:"Port Quiberon"},
+    riantec: {label:"Riantec", docId:"riantec", storageKey:"kys_marine_planning_riantec_v1", tides:true, port:"Port-Louis"}
+  };
+  const SITE_KEY = "kys_marine_site";
+  let currentSite = SITES[localStorage.getItem(SITE_KEY)] ? localStorage.getItem(SITE_KEY) : "carnac";
+  let STORAGE_KEY = SITES[currentSite].storageKey;
+  function docRefFor(site){ return db ? doc(db, "kys_marine_planning", SITES[site].docId) : null; }
+  if(db) planningDocRef = docRefFor(currentSite);
   const OLD_STORAGE_KEYS = ["kys_marine_planning_v4","kys_marine_planning_v3"];
   const uid = () => Math.random().toString(36).slice(2,10);
   const ROW_H = 29; // px per time slot
@@ -671,12 +685,50 @@ try{
     "31/12":{coef:"51",horaire:"16h44"}
   };
 
+  // Marée basse en journée (6h-18h) et coefficient à Port-Louis (Riantec), source SHOM (marine.meteoconsult.fr).
+  // Les entrées marquées d'un "*" sont approximatives (horaire hors 6h-18h ou coefficient non indiqué) — à vérifier sur maree.info.
+  const TIDE_DATA_RIANTEC = {
+    "01/10":{coef:"75",horaire:"14h33"}, "02/10":{coef:"60",horaire:"15h25"}, "03/10":{coef:"46",horaire:"16h31"},
+    "04/10":{coef:"41*",horaire:"17h58"}, "05/10":{coef:"40",horaire:"06h36"}, "06/10":{coef:"48",horaire:"08h02"},
+    "07/10":{coef:"62",horaire:"09h04"}, "08/10":{coef:"77",horaire:"09h54"}, "09/10":{coef:"87",horaire:"10h37"},
+    "10/10":{coef:"94",horaire:"11h16"}, "11/10":{coef:"95",horaire:"11h54"}, "12/10":{coef:"91",horaire:"12h30"},
+    "13/10":{coef:"83",horaire:"13h06"}, "14/10":{coef:"74",horaire:"13h41"}, "15/10":{coef:"62",horaire:"14h17"},
+    "16/10":{coef:"50",horaire:"14h56"}, "17/10":{coef:"37",horaire:"15h42"}, "18/10":{coef:"28",horaire:"16h43"},
+    "19/10":{coef:"27*",horaire:"18h10"}, "20/10":{coef:"26",horaire:"06h56"}, "21/10":{coef:"34",horaire:"08h05"},
+    "22/10":{coef:"48",horaire:"08h54"}, "23/10":{coef:"62",horaire:"09h34"}, "24/10":{coef:"76",horaire:"10h11"},
+    "25/10":{coef:"87",horaire:"09h47"}, "26/10":{coef:"95",horaire:"10h26"}, "27/10":{coef:"99",horaire:"11h06"},
+    "28/10":{coef:"99",horaire:"11h49"}, "29/10":{coef:"88",horaire:"12h35"}, "30/10":{coef:"76",horaire:"13h26"},
+    "31/10":{coef:"62",horaire:"14h22"}, "01/11":{coef:"51",horaire:"15h30"}, "02/11":{coef:"47",horaire:"16h51"},
+    "03/11":{coef:"48*",horaire:"18h11"}, "04/11":{coef:"52",horaire:"06h38"}, "05/11":{coef:"61",horaire:"07h39"},
+    "06/11":{coef:"71",horaire:"08h30"}, "07/11":{coef:"78",horaire:"09h14"}, "08/11":{coef:"83",horaire:"09h55"},
+    "09/11":{coef:"84",horaire:"10h33"}, "10/11":{coef:"83",horaire:"11h09"}, "11/11":{coef:"80",horaire:"11h45"},
+    "12/11":{coef:"71",horaire:"12h20"}, "13/11":{coef:"63",horaire:"12h57"}, "14/11":{coef:"54",horaire:"13h35"},
+    "15/11":{coef:"45",horaire:"14h19"}, "16/11":{coef:"38",horaire:"15h10"}, "17/11":{coef:"34",horaire:"16h14"},
+    "18/11":{coef:"37",horaire:"17h26"}, "19/11":{coef:"41",horaire:"06h01"}, "20/11":{coef:"46",horaire:"06h58"},
+    "21/11":{coef:"57",horaire:"07h47"}, "22/11":{coef:"70",horaire:"08h32"}, "23/11":{coef:"81",horaire:"09h17"},
+    "24/11":{coef:"90",horaire:"10h02"}, "25/11":{coef:"96",horaire:"10h49"}, "26/11":{coef:"97",horaire:"11h38"},
+    "27/11":{coef:"94",horaire:"12h28"}, "28/11":{coef:"82",horaire:"13h21"}, "29/11":{coef:"71",horaire:"14h17"},
+    "30/11":{coef:"62",horaire:"15h18"}, "01/12":{coef:"55",horaire:"16h24"}, "02/12":{coef:"53*",horaire:"17h33"},
+    "03/12":{coef:"52",horaire:"06h00"}, "04/12":{coef:"54",horaire:"07h04"}, "05/12":{coef:"59",horaire:"08h02"},
+    "06/12":{coef:"64",horaire:"08h52"}, "07/12":{coef:"69",horaire:"09h36"}, "08/12":{coef:"72",horaire:"10h17"},
+    "09/12":{coef:"74",horaire:"10h54"}, "10/12":{coef:"74",horaire:"11h30"}, "11/12":{coef:"72",horaire:"12h05"},
+    "12/12":{coef:"67",horaire:"12h41"}, "13/12":{coef:"63",horaire:"13h17"}, "14/12":{coef:"57",horaire:"13h55"},
+    "15/12":{coef:"52",horaire:"14h37"}, "16/12":{coef:"47",horaire:"15h25"}, "17/12":{coef:"44",horaire:"16h21"},
+    "18/12":{coef:"45",horaire:"17h24"}, "19/12":{coef:"48*",horaire:"05h56"}, "20/12":{coef:"51",horaire:"06h58"},
+    "21/12":{coef:"61",horaire:"07h57"}, "22/12":{coef:"72",horaire:"08h52"}, "23/12":{coef:"83",horaire:"09h46"},
+    "24/12":{coef:"91",horaire:"10h38"}, "25/12":{coef:"97",horaire:"11h29"}, "26/12":{coef:"99",horaire:"12h20"},
+    "27/12":{coef:"93",horaire:"13h10"}, "28/12":{coef:"84",horaire:"14h00"}, "29/12":{coef:"73",horaire:"14h52"},
+    "30/12":{coef:"61",horaire:"15h47"}, "31/12":{coef:"51",horaire:"16h46"}
+  };
+
   const SEASON_DAY_LABELS = ["Lundi","Mardi","Mercredi","Jeudi","Vendredi","Samedi"];
+  function currentTides(){ return currentSite==="riantec" ? TIDE_DATA_RIANTEC : TIDE_DATA; }
   const MONTH_NAMES_FR = ["Janvier","Février","Mars","Avril","Mai","Juin","Juillet","Août","Septembre","Octobre","Novembre","Décembre"];
 
   // Construit le contenu de la fenêtre "Marées" : coefficient + horaire, groupés par mois.
   function renderTideOverlayContent(){
-    const keys = Object.keys(TIDE_DATA);
+    const TD = currentTides();
+    const keys = Object.keys(TD);
     if(!keys.length) return `<div class="tide-empty">Aucune donnée de marée enregistrée pour l'instant.</div>`;
     const byMonth = {};
     keys.forEach(k=>{
@@ -686,7 +738,7 @@ try{
     const months = Object.keys(byMonth).map(Number).sort((a,b)=>a-b);
     return months.map(mm=>{
       const rows = byMonth[mm].map(k=>{
-        const info = TIDE_DATA[k];
+        const info = TD[k];
         const d = guessDateWithYear(k);
         let dayName = d ? d.toLocaleDateString('fr-FR',{weekday:'long'}) : "";
         if(dayName) dayName = dayName.charAt(0).toUpperCase()+dayName.slice(1);
@@ -746,7 +798,7 @@ try{
     for(let i=0;i<6;i++){
       const d = new Date(nextMonday); d.setDate(d.getDate()+i);
       const key = fmtDDMM(d);
-      const tide = TIDE_DATA[key];
+      const tide = currentTides()[key] || null;
       days.push({
         id:uid(), label:SEASON_DAY_LABELS[i], date:key,
         coef: tide ? "coef "+tide.coef : "",
@@ -909,7 +961,7 @@ try{
   function loadState(){
     let raw = null;
     try{ raw = JSON.parse(localStorage.getItem(STORAGE_KEY)); }catch(e){}
-    if(!raw){
+    if(!raw && currentSite==="carnac"){
       for(const key of OLD_STORAGE_KEYS){
         try{ raw = JSON.parse(localStorage.getItem(key)); }catch(e){}
         if(raw) break;
@@ -927,6 +979,14 @@ try{
       });
       return raw;
     }
+    if(currentSite !== "carnac"){
+      const bw = blankWeek();
+      return {
+        types: CORE_TYPES.slice(),
+        people: [1,2,3,4,5].map(n=>({id:uid(), name:"Intérimaire "+n, type:'interimaire'})),
+        weeks:[bw], activeWeekId:bw.id
+      };
+    }
     const w = exampleWeek();
     return {
       types: CORE_TYPES.slice(),
@@ -938,19 +998,24 @@ try{
   let state = loadState();
   let firebaseReady = false;
   let fsSaveTimer = null;
+  let pendingSave = false;
+  let unsubSync = null;
 
   function save(){
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     if(!firebaseReady || !db) return;
+    pendingSave = true;
     clearTimeout(fsSaveTimer);
     fsSaveTimer = setTimeout(()=>{
+      pendingSave = false;
       setDoc(planningDocRef, state).catch(err=> console.error("Échec d'enregistrement Firestore:", err));
     }, 500);
   }
 
   function attachPlanningSync(){
     if(!db) return;
-    onSnapshot(planningDocRef, snap=>{
+    if(unsubSync){ unsubSync(); unsubSync = null; }
+    unsubSync = onSnapshot(planningDocRef, snap=>{
       if(snap.metadata.hasPendingWrites) return; // ignore nos propres écritures en cours
       if(!snap.exists()){
         setDoc(planningDocRef, state).catch(err=> console.error("Échec d'initialisation Firestore:", err));
@@ -2046,6 +2111,7 @@ try{
     showSaveToast(w.title+" créée ✓");
   });
   document.getElementById("tideInfoBtn").addEventListener("click", ()=>{
+    document.getElementById("tideOverlayTitle").textContent = "Marées — "+SITES[currentSite].port;
     document.getElementById("tideOverlayContent").innerHTML = renderTideOverlayContent();
     document.getElementById("tideOverlay").classList.add("open");
   });
@@ -2147,6 +2213,39 @@ try{
     });
   }
   // Sans config Firebase renseignée, l'app fonctionne comme avant (localStorage uniquement)
+
+  // ---------- Bascule de site ----------
+  const siteSelectEl = document.getElementById("siteSelect");
+  function applySiteUI(){
+    const site = SITES[currentSite];
+    siteSelectEl.value = currentSite;
+    document.getElementById("weekLabel").textContent = "Planning "+site.label;
+    document.title = "Planning KYS Marine — "+site.label;
+    document.getElementById("tideInfoBtn").style.display = site.tides ? "" : "none";
+  }
+  function switchSite(site){
+    if(!SITES[site] || site===currentSite) return;
+    clearTimeout(fsSaveTimer);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    if(pendingSave && firebaseReady && db && planningDocRef){
+      pendingSave = false;
+      setDoc(planningDocRef, state).catch(err=> console.error("Échec d'enregistrement Firestore:", err));
+    }
+    if(unsubSync){ unsubSync(); unsubSync = null; }
+    currentSite = site;
+    localStorage.setItem(SITE_KEY, site);
+    STORAGE_KEY = SITES[site].storageKey;
+    planningDocRef = docRefFor(site);
+    state = loadState();
+    applySiteUI();
+    setBoardLocked(true);
+    renderAll();
+    if(firebaseReady) attachPlanningSync();
+    if(typeof renderArchivesList === "function") renderArchivesList();
+    if(typeof renderPeopleListPage === "function") renderPeopleListPage();
+  }
+  siteSelectEl.addEventListener("change", ()=> switchSite(siteSelectEl.value));
+  applySiteUI();
 
   updateToolbarVisibility();
   renderAll();
