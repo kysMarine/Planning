@@ -1113,16 +1113,34 @@ try{
   let pendingSave = false;
   let unsubSync = null;
 
+  // Envoie tout de suite l'état local à Firestore (JSON pur : Firestore refuse les valeurs "undefined").
+  function pushState(){
+    clearTimeout(fsSaveTimer);
+    pendingSave = false;
+    if(!firebaseReady || !db || !planningDocRef) return Promise.resolve();
+    return setDoc(planningDocRef, JSON.parse(JSON.stringify(state)))
+      .catch(err=>{
+        console.error("Échec d'enregistrement Firestore:", err);
+        pendingSave = true; // on retentera au prochain enregistrement
+        if(typeof showSaveToast === "function") showSaveToast("⚠ Non synchronisé — gardé sur cet appareil");
+        throw err;
+      });
+  }
+
   function save(){
+    state.updatedAt = Date.now();
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     if(!firebaseReady || !db) return;
     pendingSave = true;
     clearTimeout(fsSaveTimer);
-    fsSaveTimer = setTimeout(()=>{
-      pendingSave = false;
-      setDoc(planningDocRef, state).catch(err=> console.error("Échec d'enregistrement Firestore:", err));
-    }, 500);
+    fsSaveTimer = setTimeout(()=>{ pushState().catch(()=>{}); }, 500);
   }
+
+  // Sur mobile, un onglet mis en veille peut ne jamais exécuter le délai de 500 ms :
+  // on envoie donc immédiatement les modifications non envoyées quand la page est quittée ou masquée.
+  function flushPending(){ if(pendingSave) pushState().catch(()=>{}); }
+  document.addEventListener("visibilitychange", ()=>{ if(document.visibilityState === "hidden") flushPending(); });
+  window.addEventListener("pagehide", flushPending);
 
   function attachPlanningSync(){
     if(!db) return;
@@ -1130,11 +1148,20 @@ try{
     unsubSync = onSnapshot(planningDocRef, snap=>{
       if(snap.metadata.hasPendingWrites) return; // ignore nos propres écritures en cours
       if(!snap.exists()){
-        setDoc(planningDocRef, state).catch(err=> console.error("Échec d'initialisation Firestore:", err));
+        pushState().catch(()=>{});
         return;
       }
       const remote = snap.data();
       if(remote && Array.isArray(remote.weeks) && remote.weeks.length){
+        // Garde-fou : on n'écrase jamais des modifications locales plus récentes (ou pas encore envoyées)
+        // par une version plus ancienne venant du serveur (écho d'une sauvegarde précédente, appareil en retard…).
+        const remoteTs = remote.updatedAt || 0;
+        const localTs = state.updatedAt || 0;
+        if(pendingSave || remoteTs < localTs){
+          if(!pendingSave) pushState().catch(()=>{});
+          return;
+        }
+        if(remoteTs === localTs && remoteTs > 0) return; // déjà à jour
         state = remote;
         if(!state.activeWeekId || !state.weeks.find(w=>w.id===state.activeWeekId)){
           state.activeWeekId = state.weeks[0].id;
@@ -2340,10 +2367,9 @@ try{
   document.getElementById("saveNowBtn").addEventListener("click", ()=>{
     save();
     if(firebaseReady && db && planningDocRef){
-      clearTimeout(fsSaveTimer);
-      setDoc(planningDocRef, state)
+      pushState()
         .then(()=> showSaveToast("Semaine enregistrée ✓"))
-        .catch(()=> showSaveToast("Échec de l'enregistrement en ligne — gardé en local"));
+        .catch(()=>{ /* message déjà affiché par pushState */ });
     } else {
       showSaveToast("Semaine enregistrée (sur cet appareil) ✓");
     }
@@ -2415,10 +2441,7 @@ try{
     if(!SITES[site] || site===currentSite) return;
     clearTimeout(fsSaveTimer);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-    if(pendingSave && firebaseReady && db && planningDocRef){
-      pendingSave = false;
-      setDoc(planningDocRef, state).catch(err=> console.error("Échec d'enregistrement Firestore:", err));
-    }
+    if(pendingSave && firebaseReady && db && planningDocRef) pushState().catch(()=>{});
     if(unsubSync){ unsubSync(); unsubSync = null; }
     currentSite = site;
     localStorage.setItem(SITE_KEY, site);
