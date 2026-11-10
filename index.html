@@ -611,7 +611,7 @@
 // FIREBASE — backend pour synchroniser le planning entre postes
 // ============================================================
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
-import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
+import { getFirestore, doc, getDoc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 import { getAuth, onAuthStateChanged, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
 
 // 🔧 À REMPLACER : colle ici la config de TON projet Firebase
@@ -1113,21 +1113,86 @@ try{
   let pendingSave = false;
   let unsubSync = null;
 
-  // Envoie tout de suite l'état local à Firestore (JSON pur : Firestore refuse les valeurs "undefined").
-  function pushState(){
+  // ---------- Fusion semaine par semaine (évite qu'un appareil en retard écrase le travail d'un autre) ----------
+  // Chaque semaine porte son propre "updatedAt" ; les semaines supprimées laissent une trace (deletedWeeks).
+  const weekHashes = new Map();
+  function weekSig(w){ return JSON.stringify(w, (k,v)=> k==="updatedAt" ? undefined : v); }
+  function baselineHashes(){
+    weekHashes.clear();
+    state.weeks.forEach(w=> weekHashes.set(w.id, weekSig(w)));
+  }
+  function touchChangedWeeks(){
+    const now = Date.now();
+    state.weeks.forEach(w=>{
+      const h = weekSig(w);
+      if(weekHashes.get(w.id) !== h){ w.updatedAt = now; weekHashes.set(w.id, h); }
+    });
+  }
+  function stateSig(st){
+    return JSON.stringify({
+      w:(st.weeks||[]).map(w=>[w.id, weekSig(w)]).sort((a,b)=> a[0]<b[0] ? -1 : 1),
+      t:st.types, p:st.people, d:Object.keys(st.deletedWeeks||{}).sort()
+    });
+  }
+  function mergeStates(local, remote){
+    const dl = {...(remote.deletedWeeks||{})};
+    Object.entries(local.deletedWeeks||{}).forEach(([id,ts])=>{ dl[id] = Math.max(dl[id]||0, ts); });
+    const byId = new Map();
+    (remote.weeks||[]).forEach(w=> byId.set(w.id, w));
+    (local.weeks||[]).forEach(w=>{
+      const ex = byId.get(w.id);
+      if(!ex || (w.updatedAt||0) >= (ex.updatedAt||0)) byId.set(w.id, w);
+    });
+    const weeks = Array.from(byId.values())
+      .filter(w=> !(dl[w.id] && dl[w.id] >= (w.updatedAt||0)))
+      .sort((a,b)=> (a.createdAt||0)-(b.createdAt||0));
+    const newer = (local.updatedAt||0) >= (remote.updatedAt||0) ? local : remote;
+    const merged = {
+      ...newer,
+      weeks: weeks.length ? weeks : (local.weeks||[]),
+      deletedWeeks: dl,
+      updatedAt: Math.max(local.updatedAt||0, remote.updatedAt||0)
+    };
+    if(!merged.weeks.find(w=>w.id===merged.activeWeekId)) merged.activeWeekId = merged.weeks[0].id;
+    return merged;
+  }
+  baselineHashes();
+
+  // Envoie l'état local à Firestore après l'avoir fusionné avec la version du serveur.
+  async function pushState(){
     clearTimeout(fsSaveTimer);
     pendingSave = false;
-    if(!firebaseReady || !db || !planningDocRef) return Promise.resolve();
-    return setDoc(planningDocRef, JSON.parse(JSON.stringify(state)))
-      .catch(err=>{
-        console.error("Échec d'enregistrement Firestore:", err);
-        pendingSave = true; // on retentera au prochain enregistrement
-        if(typeof showSaveToast === "function") showSaveToast("⚠ Non synchronisé — gardé sur cet appareil");
-        throw err;
-      });
+    if(!firebaseReady || !db || !planningDocRef) return;
+    const ref = planningDocRef;
+    const st = state;
+    try{
+      let out = st;
+      const snap = await getDoc(ref);
+      if(snap.exists()){
+        const remote = snap.data();
+        if(remote && Array.isArray(remote.weeks)){
+          if(ref === planningDocRef){
+            const before = stateSig(state);
+            state = mergeStates(state, remote);
+            out = state;
+            baselineHashes();
+            if(stateSig(state) !== before) renderAll();
+          } else {
+            out = mergeStates(st, remote);
+          }
+        }
+      }
+      await setDoc(ref, JSON.parse(JSON.stringify(out)));
+    }catch(err){
+      console.error("Échec d'enregistrement Firestore:", err);
+      pendingSave = true; // on retentera au prochain enregistrement / retour du réseau
+      if(typeof showSaveToast === "function") showSaveToast("⚠ Non synchronisé — gardé sur cet appareil");
+      throw err;
+    }
   }
 
   function save(){
+    touchChangedWeeks();
     state.updatedAt = Date.now();
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     if(!firebaseReady || !db) return;
@@ -1137,10 +1202,12 @@ try{
   }
 
   // Sur mobile, un onglet mis en veille peut ne jamais exécuter le délai de 500 ms :
-  // on envoie donc immédiatement les modifications non envoyées quand la page est quittée ou masquée.
+  // on tente d'envoyer quand la page est masquée / quittée, et au retour du réseau.
+  // Si ça n'aboutit pas, la fusion par semaine au prochain chargement renvoie les modifications locales.
   function flushPending(){ if(pendingSave) pushState().catch(()=>{}); }
   document.addEventListener("visibilitychange", ()=>{ if(document.visibilityState === "hidden") flushPending(); });
   window.addEventListener("pagehide", flushPending);
+  window.addEventListener("online", flushPending);
 
   function attachPlanningSync(){
     if(!db) return;
@@ -1153,20 +1220,17 @@ try{
       }
       const remote = snap.data();
       if(remote && Array.isArray(remote.weeks) && remote.weeks.length){
-        // Garde-fou : on n'écrase jamais des modifications locales plus récentes (ou pas encore envoyées)
-        // par une version plus ancienne venant du serveur (écho d'une sauvegarde précédente, appareil en retard…).
-        const remoteTs = remote.updatedAt || 0;
-        const localTs = state.updatedAt || 0;
-        if(pendingSave || remoteTs < localTs){
-          if(!pendingSave) pushState().catch(()=>{});
-          return;
+        const before = stateSig(state);
+        const prevActive = state.activeWeekId;
+        state = mergeStates(state, remote);
+        baselineHashes();
+        if(stateSig(state) !== before || state.activeWeekId !== prevActive) renderAll();
+        // Si le local contient des choses que le serveur n'a pas (semaine plus récente…), on les envoie.
+        if(stateSig(state) !== stateSig(remote) && !pendingSave){
+          pendingSave = true;
+          clearTimeout(fsSaveTimer);
+          fsSaveTimer = setTimeout(()=>{ pushState().catch(()=>{}); }, 300);
         }
-        if(remoteTs === localTs && remoteTs > 0) return; // déjà à jour
-        state = remote;
-        if(!state.activeWeekId || !state.weeks.find(w=>w.id===state.activeWeekId)){
-          state.activeWeekId = state.weeks[0].id;
-        }
-        renderAll();
       }
     }, err=> console.error("Erreur de synchronisation Firestore:", err));
   }
@@ -2182,6 +2246,7 @@ try{
       if(!week) return;
       if(state.weeks.length<=1){ alert("Impossible de supprimer la dernière semaine."); return; }
       if(!confirm("Supprimer définitivement « "+(week.title||"Sans titre")+" » ?")) return;
+      state.deletedWeeks = state.deletedWeeks || {}; state.deletedWeeks[week.id] = Date.now();
       state.weeks = state.weeks.filter(w=>w.id!==week.id);
       if(state.activeWeekId===week.id) state.activeWeekId = state.weeks[0].id;
       save(); renderAll(); renderArchivesList();
@@ -2345,6 +2410,7 @@ try{
   document.getElementById("deleteWeekBtn").addEventListener("click", ()=>{
     if(state.weeks.length<=1){ alert("Impossible de supprimer la dernière semaine."); return; }
     if(!confirm("Supprimer définitivement cette semaine ?")) return;
+    state.deletedWeeks = state.deletedWeeks || {}; state.deletedWeeks[state.activeWeekId] = Date.now();
     state.weeks = state.weeks.filter(w=>w.id!==state.activeWeekId);
     state.activeWeekId = state.weeks[0].id;
     save(); renderAll();
@@ -2448,6 +2514,7 @@ try{
     STORAGE_KEY = SITES[site].storageKey;
     planningDocRef = docRefFor(site);
     state = loadState();
+    baselineHashes();
     applySiteUI();
     setBoardLocked(true);
     renderAll();
